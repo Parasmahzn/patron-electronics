@@ -1,5 +1,6 @@
 import 'server-only';
 import { prisma } from '@/lib/db/client';
+import { Prisma } from '@/lib/generated/prisma/client';
 import { requireAdmin } from '@/lib/auth/session';
 import { categorySchema, type CategoryInput } from '@/lib/validations/category';
 import {
@@ -94,9 +95,16 @@ export async function deleteCategory(id: number) {
 
 export async function reorderCategories(orderedIds: number[]) {
   await requireAdmin();
-  await prisma.$transaction(
-    orderedIds.map((id, index) =>
-      prisma.category.update({ where: { id }, data: { displayOrder: index } }),
-    ),
+  if (orderedIds.length === 0) return;
+
+  // A single UPDATE ... CASE statement instead of N transactional round
+  // trips: the shared MySQL tier is slow enough that N sequential updates
+  // inside prisma.$transaction() can exceed its 5s interactive timeout.
+  const cases = Prisma.join(
+    orderedIds.map((id, index) => Prisma.sql`WHEN ${id} THEN ${index}`),
+    ' ',
   );
+  const ids = Prisma.join(orderedIds);
+
+  await prisma.$executeRaw`UPDATE Category SET displayOrder = CASE id ${cases} END WHERE id IN (${ids})`;
 }
