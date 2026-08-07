@@ -54,6 +54,96 @@ body {
   }
 }
 
+/* Product badge micro-animations. Kept as plain CSS (no Framer Motion, no
+   client component) since ProductCard/ProductBadges are Server Components
+   and this decoration needs no interactivity — the prefers-reduced-motion
+   rule below already neutralizes all of it for free. */
+@keyframes badge-pop-in {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes badge-twinkle {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes badge-flicker {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  30% {
+    transform: scale(1.08) rotate(-3deg);
+  }
+  60% {
+    transform: scale(0.97) rotate(2deg);
+  }
+}
+
+@keyframes badge-shimmer-sweep {
+  0%,
+  45% {
+    transform: translateX(-120%);
+  }
+  65%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@layer utilities {
+  .badge-anim-pop {
+    animation: badge-pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  .badge-anim-featured {
+    animation:
+      badge-pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+      badge-twinkle 2.4s ease-in-out 0.6s infinite;
+  }
+
+  .badge-anim-bestseller {
+    animation:
+      badge-pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+      badge-flicker 2.6s ease-in-out 0.6s infinite;
+  }
+
+  .badge-anim-shimmer {
+    position: relative;
+    overflow: hidden;
+    animation: badge-pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  .badge-anim-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.75) 50%,
+      transparent 70%
+    );
+    animation: badge-shimmer-sweep 3.2s ease-in-out infinite;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

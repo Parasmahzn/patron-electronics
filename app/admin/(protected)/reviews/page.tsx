@@ -5,6 +5,7 @@ import { setReviewVisibilityAction, deleteReviewAction } from '@/app/actions/rev
 import { Card } from '@/components/admin/Card';
 import { LinkButton } from '@/components/admin/LinkButton';
 import { ConfirmSubmitButton } from '@/components/admin/ConfirmSubmitButton';
+import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { StarRating } from '@/components/ui/StarRating';
@@ -72,7 +73,10 @@ export default async function AdminReviewsPage() {
                   return (
                     <tr key={review.id}>
                       <td className="text-midnight px-4 py-3 font-medium whitespace-nowrap">
-                        {review.authorName}
+                        <div className="flex items-center gap-2">
+                          <Avatar name={review.authorName} size={24} />
+                          {review.authorName}
+                        </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <StarRating rating={review.rating} size={14} />

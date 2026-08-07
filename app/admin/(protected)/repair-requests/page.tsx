@@ -114,7 +114,10 @@ export default async function AdminRepairRequestsPage({
                       {request.deviceType} — {request.brand} {request.model}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={REPAIR_STATUS_META[request.status].tone}>
+                      <Badge
+                        tone={REPAIR_STATUS_META[request.status].tone}
+                        icon={REPAIR_STATUS_META[request.status].icon}
+                      >
                         {REPAIR_STATUS_META[request.status].label}
                       </Badge>
                     </td>

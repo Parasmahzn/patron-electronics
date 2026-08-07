@@ -114,12 +114,18 @@ export default async function AdminOrdersPage({
                       {formatCurrency(order.total)}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={ORDER_STATUS_META[order.orderStatus].tone}>
+                      <Badge
+                        tone={ORDER_STATUS_META[order.orderStatus].tone}
+                        icon={ORDER_STATUS_META[order.orderStatus].icon}
+                      >
                         {ORDER_STATUS_META[order.orderStatus].label}
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={PAYMENT_STATUS_META[order.paymentStatus].tone}>
+                      <Badge
+                        tone={PAYMENT_STATUS_META[order.paymentStatus].tone}
+                        icon={PAYMENT_STATUS_META[order.paymentStatus].icon}
+                      >
                         {PAYMENT_STATUS_META[order.paymentStatus].label}
                       </Badge>
                     </td>

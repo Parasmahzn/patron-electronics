@@ -51,10 +51,16 @@ export function OrderTrackingForm() {
               </p>
             </div>
             <div className="flex gap-2">
-              <Badge tone={ORDER_STATUS_META[state.order.orderStatus].tone}>
+              <Badge
+                tone={ORDER_STATUS_META[state.order.orderStatus].tone}
+                icon={ORDER_STATUS_META[state.order.orderStatus].icon}
+              >
                 {ORDER_STATUS_META[state.order.orderStatus].label}
               </Badge>
-              <Badge tone={PAYMENT_STATUS_META[state.order.paymentStatus].tone}>
+              <Badge
+                tone={PAYMENT_STATUS_META[state.order.paymentStatus].tone}
+                icon={PAYMENT_STATUS_META[state.order.paymentStatus].icon}
+              >
                 Payment: {PAYMENT_STATUS_META[state.order.paymentStatus].label}
               </Badge>
             </div>

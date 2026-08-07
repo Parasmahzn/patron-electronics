@@ -185,7 +185,10 @@ export default async function AdminOrderDetailPage({
         <div className="flex flex-col gap-6">
           <Card title="Order Status">
             <div className="mb-3">
-              <Badge tone={ORDER_STATUS_META[order.orderStatus].tone}>
+              <Badge
+                tone={ORDER_STATUS_META[order.orderStatus].tone}
+                icon={ORDER_STATUS_META[order.orderStatus].icon}
+              >
                 {ORDER_STATUS_META[order.orderStatus].label}
               </Badge>
             </div>
@@ -205,7 +208,10 @@ export default async function AdminOrderDetailPage({
 
           <Card title="Payment Status">
             <div className="mb-3">
-              <Badge tone={PAYMENT_STATUS_META[order.paymentStatus].tone}>
+              <Badge
+                tone={PAYMENT_STATUS_META[order.paymentStatus].tone}
+                icon={PAYMENT_STATUS_META[order.paymentStatus].icon}
+              >
                 {PAYMENT_STATUS_META[order.paymentStatus].label}
               </Badge>
             </div>

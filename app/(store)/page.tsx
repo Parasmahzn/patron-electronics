@@ -6,6 +6,7 @@ import {
   Clock,
   MapPin,
   Phone,
+  Quote,
   ShieldCheck,
   Smartphone,
   Truck,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { StarRating } from '@/components/ui/StarRating';
+import { Avatar } from '@/components/ui/Avatar';
 import { ProductRail } from '@/components/products/ProductRail';
 import { getSiteSettings } from '@/lib/settings/settings.service';
 import { getActiveCategories } from '@/lib/products/category.service';
@@ -290,10 +292,22 @@ export default async function HomePage() {
             </div>
             <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {reviews.map((review) => (
-                <div key={review.id} className="border-border rounded-lg border bg-white p-5">
+                <div
+                  key={review.id}
+                  className="border-border relative rounded-lg border bg-white p-5"
+                >
+                  <Quote
+                    aria-hidden="true"
+                    className="text-primary-light absolute top-4 right-4 h-8 w-8"
+                  />
                   <StarRating rating={review.rating} size={14} />
-                  <p className="text-midnight mt-3 text-sm">&ldquo;{review.comment}&rdquo;</p>
-                  <p className="text-midnight mt-3 text-sm font-semibold">{review.authorName}</p>
+                  <p className="text-midnight relative mt-3 text-sm">
+                    &ldquo;{review.comment}&rdquo;
+                  </p>
+                  <div className="mt-4 flex items-center gap-3">
+                    <Avatar name={review.authorName} size={36} />
+                    <p className="text-midnight text-sm font-semibold">{review.authorName}</p>
+                  </div>
                 </div>
               ))}
             </div>

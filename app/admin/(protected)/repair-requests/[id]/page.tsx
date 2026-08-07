@@ -105,7 +105,10 @@ export default async function AdminRepairRequestDetailPage({
         <div className="flex flex-col gap-6">
           <Card title="Status">
             <div className="mb-3">
-              <Badge tone={REPAIR_STATUS_META[request.status].tone}>
+              <Badge
+                tone={REPAIR_STATUS_META[request.status].tone}
+                icon={REPAIR_STATUS_META[request.status].icon}
+              >
                 {REPAIR_STATUS_META[request.status].label}
               </Badge>
             </div>
