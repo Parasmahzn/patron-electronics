@@ -15,7 +15,11 @@ const PLACEHOLDER_COLORS: Record<ProductType, string> = {
   GADGET: '#F59E0B',
 };
 
-const IMAGES_DIR = path.join(__dirname, '..', 'public', 'images', 'products');
+// Lives outside public/images/ deliberately: that directory is mounted as a
+// persistent volume in production (see README) so admin-uploaded files
+// survive redeploys, and Railway volumes are not overlays — anything baked
+// into the image at the mount path would be hidden the moment it attaches.
+const IMAGES_DIR = path.join(__dirname, '..', 'public', 'seed', 'products');
 
 /**
  * Generates a simple flat-color placeholder product image so the storefront
@@ -45,7 +49,7 @@ function ensurePlaceholderImage(
   fs.mkdirSync(IMAGES_DIR, { recursive: true });
   const filePath = path.join(IMAGES_DIR, `${slug}.svg`);
   fs.writeFileSync(filePath, svg, 'utf-8');
-  return `/images/products/${slug}.svg`;
+  return `/seed/products/${slug}.svg`;
 }
 
 type CategorySeed = {

@@ -42,6 +42,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# runtime-uploaded product/category/service images (see lib/uploads/) — never
+# committed; persisted in production via a mounted volume instead. Static seed
+# placeholder images live in public/seed/, not here.
+/public/images/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
