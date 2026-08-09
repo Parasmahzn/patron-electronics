@@ -4,7 +4,16 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { cache } from 'react';
 import { prisma } from '@/lib/db/client';
-import { SESSION_COOKIE_NAME, SESSION_DURATION_DAYS } from '@/config/site';
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_DURATION_DAYS,
+  ADMIN_IDLE_TIMEOUT_MINUTES,
+} from '@/config/site';
+
+const IDLE_TIMEOUT_MS = ADMIN_IDLE_TIMEOUT_MINUTES * 60 * 1000;
+// Only re-write `lastActiveAt` when it's meaningfully stale, so an admin
+// clicking around doesn't trigger a database write on every single request.
+const ACTIVITY_TOUCH_THRESHOLD_MS = 60 * 1000;
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -42,12 +51,27 @@ export const getAdminSession = cache(async () => {
     where: { tokenHash },
     select: {
       expiresAt: true,
+      lastActiveAt: true,
       admin: { select: { id: true, email: true, name: true } },
     },
   });
 
   if (!session || session.expiresAt < new Date()) {
     return null;
+  }
+
+  const now = new Date();
+
+  // Idle sessions are killed outright (not just left to expire naturally) so
+  // an unattended admin browser doesn't stay signed in for the full
+  // `SESSION_DURATION_DAYS` just because nobody closed the tab.
+  if (now.getTime() - session.lastActiveAt.getTime() > IDLE_TIMEOUT_MS) {
+    await prisma.adminSession.deleteMany({ where: { tokenHash } });
+    return null;
+  }
+
+  if (now.getTime() - session.lastActiveAt.getTime() > ACTIVITY_TOUCH_THRESHOLD_MS) {
+    await prisma.adminSession.update({ where: { tokenHash }, data: { lastActiveAt: now } });
   }
 
   return session.admin;

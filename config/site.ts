@@ -17,6 +17,9 @@ export const LOGIN_LOCKOUT_MINUTES = 15;
 export const SESSION_COOKIE_NAME = 'pe_admin_session';
 export const SESSION_DURATION_DAYS = 7;
 
+export const ADMIN_IDLE_TIMEOUT_MINUTES = 10;
+export const ADMIN_IDLE_WARNING_SECONDS = 30;
+
 export const NAV_LINKS = [
   { href: '/', label: 'Home' },
   { href: '/shop', label: 'Shop' },

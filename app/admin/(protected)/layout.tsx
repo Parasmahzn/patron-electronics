@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { getAdminSession, requireAdmin } from '@/lib/auth/session';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminTopbar } from '@/components/admin/AdminTopbar';
+import { IdleTimeoutWatcher } from '@/components/admin/IdleTimeoutWatcher';
 
 export default async function AdminProtectedLayout({ children }: { children: ReactNode }) {
   // Server Actions re-render the current route's layout tree to produce
@@ -31,6 +32,8 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
         </div>
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>
+
+      <IdleTimeoutWatcher />
     </div>
   );
 }

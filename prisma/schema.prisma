@@ -29,11 +29,12 @@ model Admin {
 // HTTP-only cookie; only its SHA-256 hash is persisted so a database leak
 // cannot be used to reconstruct valid session cookies.
 model AdminSession {
-  id         Int      @id @default(autoincrement())
-  tokenHash  String   @unique
-  adminId    Int
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  tokenHash    String   @unique
+  adminId      Int
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastActiveAt DateTime @default(now())
 
   admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
