@@ -33,7 +33,10 @@ export class LocalImageStorage implements ImageStorage {
   }
 
   getUrl(storageKey: string): string {
-    return `/images/${storageKey}`;
+    // Served via app/uploads/[...path]/route.ts, not Next's static public/
+    // serving — that mechanism freezes its file list at server boot and
+    // never sees files written afterward (i.e. every upload).
+    return `/uploads/${storageKey}`;
   }
 
   async exists(storageKey: string): Promise<boolean> {

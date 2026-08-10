@@ -52,7 +52,7 @@ export const getAdminSession = cache(async () => {
     select: {
       expiresAt: true,
       lastActiveAt: true,
-      admin: { select: { id: true, email: true, name: true } },
+      admin: { select: { id: true, email: true, name: true, avatarUrl: true } },
     },
   });
 
@@ -98,4 +98,19 @@ export async function destroyAdminSession(): Promise<void> {
     await prisma.adminSession.deleteMany({ where: { tokenHash: hashToken(token) } });
   }
   cookieStore.delete(SESSION_COOKIE_NAME);
+}
+
+/**
+ * Signs out every other active session for this admin, keeping the current
+ * one signed in. Used after a password change so a session opened elsewhere
+ * (or stolen) can't keep using credentials that no longer apply.
+ */
+export async function invalidateOtherAdminSessions(adminId: number): Promise<void> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const currentTokenHash = token ? hashToken(token) : null;
+
+  await prisma.adminSession.deleteMany({
+    where: { adminId, ...(currentTokenHash ? { tokenHash: { not: currentTokenHash } } : {}) },
+  });
 }

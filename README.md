@@ -42,10 +42,10 @@ cp .env.example .env
 | --- | --- |
 | `DATABASE_URL` | MySQL connection string: `mysql://USER:PASSWORD@HOST:PORT/DATABASE`. URL-encode special characters in the password (e.g. `?` → `%3F`, `+` → `%2B`). |
 | `AUTH_SECRET` | Random secret used for session-related cryptography. Generate with `openssl rand -base64 32`. |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Credentials for the initial admin account created by the seed script. Change the password after first login in a real deployment; never commit real credentials. |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Only read by `pnpm db:seed`, which upserts an `Admin` row keyed by this email and (re)hashes this password into it. Login itself checks the database, not these variables directly — see [Admin Setup](#admin-setup). Never commit real credentials. |
 | `NODE_ENV` | `development` or `production`. |
 | `NEXT_PUBLIC_SITE_URL` | Public base URL, used for metadata/canonical URLs. |
-| `STORAGE_PROVIDER` | Image upload storage backend. Only `local` is implemented (writes under `public/images/`); see [Image Handling](#image-handling). |
+| `STORAGE_PROVIDER` | Image upload storage backend. Only `local` is implemented (writes under `public/images/`); see [Image Handling](#image-handling) for the full storage layout. |
 
 **Never commit `.env`.** It is already git-ignored.
 
@@ -81,7 +81,7 @@ pnpm db:seed
 Seeds:
 
 - 11 product categories
-- 26 realistic products across mobile phones, laptops, accessories, chargers/cables, earphones, power banks, smart watches, cases, and gadgets — spanning multiple brands, prices, and product flags (new/featured/best seller/top sale/recommended/on sale) — with generated placeholder images under `public/images/products/`
+- 26 realistic products across mobile phones, laptops, accessories, chargers/cables, earphones, power banks, smart watches, cases, and gadgets — spanning multiple brands, prices, and product flags (new/featured/best seller/top sale/recommended/on sale) — with generated placeholder images under `public/seed/products/` (see [Image Handling](#image-handling))
 - 14 repair services
 - 5 representative reviews
 - Default storefront settings (business info, hero copy, announcement bar)
@@ -112,27 +112,68 @@ Before deploying, run the full quality gate (see below) and apply the schema to 
 
 ## Admin Setup
 
-The initial admin account is created by the seed script from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Admin authentication uses:
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env` and the `Admin` table in the database are **not two independent things** — the env vars are only ever the *input* to a one-time provisioning step; the database is the sole source of truth actually consulted at login. Concretely:
 
-- bcrypt password hashing (12 salt rounds)
+- **Login always checks the database, never `.env`.** `loginAction` (`app/actions/auth.ts`) looks up `Admin` by the submitted email and bcrypt-compares the submitted password against that row's `passwordHash`. `process.env.ADMIN_EMAIL`/`ADMIN_PASSWORD` are not read anywhere in the login path.
+- **`.env` is only read by `prisma/seed.ts`**, and only while `pnpm db:seed` is actually running. Each run hashes the current `ADMIN_PASSWORD` with bcrypt (12 salt rounds) and `upsert`s an `Admin` row keyed by `ADMIN_EMAIL`: creates it if that email doesn't exist yet, or **overwrites `passwordHash` on the existing row** if it does.
+
+What this means in practice:
+
+- Editing `ADMIN_PASSWORD` in `.env` changes nothing by itself — the database still has the old hash until you run `pnpm db:seed` again. Since there is no admin-facing "change password" UI, editing `.env` + re-running `pnpm db:seed` is the intended way to rotate the password.
+- Editing `ADMIN_EMAIL` and re-seeding does **not** rename the existing admin — upsert is keyed by email, so a different email creates a *second*, separate `Admin` row. The old email keeps working as its own login until removed manually (e.g. via `pnpm db:studio`).
+- Changing `.env` on a server that never runs `pnpm db:seed` again (e.g. most redeploys) has no effect at all — only an actual seed run touches the database.
+
+Beyond provisioning, admin authentication uses:
+
 - Server-side sessions stored in the database (`AdminSession`), referenced by an opaque, HTTP-only, `SameSite=Lax` cookie — the raw session token is never stored server-side, only its SHA-256 hash
 - Secure cookies in production (`Secure` flag set when `NODE_ENV=production`)
+- A 10-minute idle timeout: `AdminSession.lastActiveAt` is checked and refreshed on every authenticated request (`getAdminSession()`), and a client-side watcher (`components/admin/IdleTimeoutWatcher.tsx`) warns and then signs out an idle admin even if they never trigger another request
 - Persistent, database-backed login rate limiting (`LoginAttempt`) — 5 failed attempts locks an IP out for 15 minutes
 - `proxy.ts` performs a fast, optimistic cookie-presence check on every `/admin/*` request; the authoritative authorization check (`requireAdmin()`) runs in the protected layout and inside every mutating service function in `lib/*/*.service.ts`
 
-To create additional admin accounts, use Prisma Studio (`pnpm db:studio`) or a one-off script — there is intentionally no public admin sign-up route.
+To create additional admin accounts without going through `.env` + reseed, use Prisma Studio (`pnpm db:studio`) or a one-off script — there is intentionally no public admin sign-up route.
 
 ## Image Handling
 
-Product/category/service images are stored as URLs/paths, not binaries, in the database (seeded placeholder images are generated as SVG files under `public/images/products/`). Beyond that, the admin portal has a real upload pipeline — not just free-text URL fields:
+Product/category/service images are stored as URLs/paths, not binaries, in the database. Two entirely separate kinds of image content exist on disk, deliberately kept apart:
 
-- **Upload UI**: every product/category/service image field has a drag-and-drop/click-to-browse widget (`components/admin/ImageUpload.tsx`) alongside the manual URL text field (kept for backward compatibility with external URLs and the seed-generated placeholders).
-- **Validation** (`lib/uploads/upload.validation.ts`): rejects anything over 25MB; checks the declared MIME type against an allowlist (JPEG, PNG, WebP, GIF, AVIF — no SVG); sniffs the actual file bytes with `file-type` to catch a spoofed extension; decodes with `sharp` to reject corrupted files and enforce a dimension/pixel ceiling (decompression-bomb guard); re-encodes to optimized WebP (strips EXIF metadata, normalizes format for storefront delivery).
-- **Storage abstraction** (`lib/uploads/storage/`): an `ImageStorage` interface (`upload`/`delete`/`getUrl`/`exists`) with a `LocalImageStorage` implementation writing under `public/images/<products|categories|services>/<yyyy>/<mm>/<uuid>.webp`, selected via `STORAGE_PROVIDER`. Adding S3/Cloudflare R2/Azure Blob later means adding one new class behind the same interface — no changes to Product/Category/Service logic, validation, or the database schema.
-- **Filenames are never trusted**: the server always generates the storage key (UUID + extension derived from the *validated* format); the client's original filename is kept only as inert display metadata.
-- **Lifecycle & cleanup**: a new image is uploaded and confirmed stored *before* an old one is ever deleted — never the reverse. A failed save cleans up the file it would have referenced; replacing or removing an image, or deleting the owning product/category/service, deletes the now-orphaned file only after the database change succeeds. No file is deleted while a database row still references it.
+```text
+public/
+  seed/
+    products/<slug>.svg        Static placeholder art, generated + committed by prisma/seed.ts.
+                                Part of the build; never written to or read by the upload
+                                pipeline; never deleted by any admin action (see below).
 
-Product images additionally carry per-image metadata (`storageKey`, dimensions, format, file size) in the `ProductImage` table, plus explicit reorder and "set as primary" controls in the admin UI — not just an array-index convention.
+  images/                      Runtime-upload space ONLY. Nothing here at build time — the
+    products/<yyyy>/<mm>/<uuid>.webp     entire tree is .gitignore'd. In production this
+    categories/<yyyy>/<mm>/<uuid>.webp   directory should be a mounted persistent volume
+    services/<yyyy>/<mm>/<uuid>.webp     (see Production Persistence below), since a plain
+                                          container filesystem is wiped on every redeploy.
+```
+
+Filenames are UUIDs the server generates itself — the admin's original filename is kept only as inert display metadata, never used to build a path. The `<yyyy>/<mm>/` split just keeps any one directory from accumulating thousands of files over time.
+
+### Upload pipeline (what happens to a file the admin drops in)
+
+1. **Upload UI** (`components/admin/ImageUpload.tsx`) — drag-and-drop/click-to-browse widget on every product/category/service image field, alongside a manual URL text field kept for external URLs.
+2. **Validation** (`lib/uploads/upload.validation.ts`) — rejects anything over 25MB; checks the declared MIME type against an allowlist (JPEG, PNG, WebP, GIF, AVIF — no SVG, so this pipeline can never be used to plant an SVG next to the seed placeholders); sniffs the *actual* file bytes with `file-type` to catch a spoofed extension; decodes with `sharp` to reject corrupted files and enforce a dimension/pixel ceiling (decompression-bomb guard).
+3. **Normalization** — re-encoded to WebP, stripping EXIF metadata, before it ever touches disk. Every managed upload is WebP; nothing else is ever written by this pipeline.
+4. **Storage** (`lib/uploads/storage/`) — an `ImageStorage` interface (`upload`/`delete`/`getUrl`/`exists`) with a `LocalImageStorage` implementation writing to `public/images/<destination>/<yyyy>/<mm>/<uuid>.webp`, selected via `STORAGE_PROVIDER`. Adding S3/Cloudflare R2/Azure Blob later means adding one new class behind the same interface — no changes to Product/Category/Service logic, validation, or the database schema.
+5. **Lifecycle & cleanup** — a new image is uploaded and confirmed stored *before* an old one is ever deleted, never the reverse. A failed save cleans up the file it would have referenced; replacing or removing an image, or deleting the owning product/category/service, deletes the now-orphaned file only after the database change succeeds. No file is deleted while a database row still references it — and this cleanup is keyed off the database's `storageKey` column, so it can never reach a seed placeholder (seed rows never populate that column).
+
+### How uploaded images are served
+
+Uploaded images are served through `app/uploads/[...path]/route.ts` (`GET /uploads/<storageKey>`) — a Route Handler that reads the file from disk fresh on every request — **not** through Next.js's built-in `public/` static file serving.
+
+This matters and is easy to get backwards: `next start` computes its set of servable `public/` files once at server boot and never rescans the filesystem afterward. Any file that appears in `public/images/` *after* the server has already started — which describes every single runtime upload, by definition — would 404 forever under plain static serving, no matter how long it's actually been sitting on disk. (`next dev` doesn't have this limitation, which is why a naive setup can look correct in local development and then fail in production.) The seed placeholders under `public/seed/` don't have this problem because they exist before the server ever boots, so they're served natively as ordinary static assets.
+
+### Product images
+
+Products carry *multiple* images with richer metadata than categories/services (which have a single `image` string field each). The `ProductImage` table stores, per image: `url`, `alt`, `sortOrder`, `isPrimary`, and — for images that went through the managed upload pipeline — `storageKey`, `originalName`, `mimeType`, `fileSize`, `width`, `height`, `format` (all nullable, so seed/legacy/external images need no backfill). The admin product form exposes explicit reorder and "set as primary" controls backed by these columns, not an implicit array-index convention.
+
+### Production persistence
+
+A plain container filesystem does not survive a redeploy or restart, and runtime uploads live under `public/images/` precisely because that's the one directory meant to change after boot. Deploying anywhere other than a host with a persistent local disk requires mounting that directory onto durable storage — e.g. a Railway volume mounted at the container's `public/images` path — or switching `STORAGE_PROVIDER` to an object-storage-backed implementation once one exists. Without one or the other, every uploaded image is lost on the next deploy.
 
 ## Available Scripts
 

@@ -26,7 +26,7 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
       </aside>
 
       <div className="flex min-h-screen flex-1 flex-col">
-        <AdminTopbar adminName={admin?.name ?? 'Admin'} />
+        <AdminTopbar adminName={admin?.name ?? 'Admin'} avatarUrl={admin?.avatarUrl ?? null} />
         <div className="border-border bg-midnight border-b lg:hidden">
           <AdminSidebar variant="horizontal" />
         </div>

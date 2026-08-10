@@ -2,13 +2,32 @@
 
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import { revalidatePath } from 'next/cache';
+import type { z } from 'zod';
 import { prisma } from '@/lib/db/client';
-import { loginSchema } from '@/lib/validations/auth';
+import { changePasswordSchema, loginSchema } from '@/lib/validations/auth';
 import { verifyPassword } from '@/lib/auth/password';
-import { createAdminSession, destroyAdminSession } from '@/lib/auth/session';
+import { createAdminSession, destroyAdminSession, requireAdmin } from '@/lib/auth/session';
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '@/lib/auth/rate-limit';
+import { changeAdminPassword, updateAdminAvatar } from '@/lib/auth/admin.service';
 
 export type LoginActionState = { error: string } | undefined;
+
+export type ChangePasswordState =
+  { error?: string; fieldErrors?: Record<string, string> } | { success: true } | undefined;
+
+export type UpdateAvatarResult = { error: string } | { success: true };
+
+function toFieldErrors(error: z.ZodError): Record<string, string> {
+  const fieldErrors: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const key = issue.path[0];
+    if (typeof key === 'string' && !fieldErrors[key]) {
+      fieldErrors[key] = issue.message;
+    }
+  }
+  return fieldErrors;
+}
 
 async function getClientIdentifier(): Promise<string> {
   const headersList = await headers();
@@ -52,4 +71,42 @@ export async function loginAction(
 export async function logoutAction() {
   await destroyAdminSession();
   redirect('/admin/login');
+}
+
+export async function changePasswordAction(
+  _prevState: ChangePasswordState,
+  formData: FormData,
+): Promise<ChangePasswordState> {
+  const admin = await requireAdmin();
+
+  const parsed = changePasswordSchema.safeParse({
+    currentPassword: formData.get('currentPassword'),
+    newPassword: formData.get('newPassword'),
+    confirmPassword: formData.get('confirmPassword'),
+  });
+
+  if (!parsed.success) {
+    return { error: 'Please fix the errors below.', fieldErrors: toFieldErrors(parsed.error) };
+  }
+
+  const result = await changeAdminPassword(admin.id, parsed.data);
+  if ('fieldErrors' in result) {
+    return { fieldErrors: result.fieldErrors };
+  }
+
+  return { success: true };
+}
+
+export async function updateAvatarAction(formData: FormData): Promise<UpdateAvatarResult> {
+  const admin = await requireAdmin();
+
+  const avatarUrl = String(formData.get('avatarUrl') ?? '').trim();
+  if (!avatarUrl) {
+    return { error: 'No image provided.' };
+  }
+
+  await updateAdminAvatar(admin.id, avatarUrl);
+  revalidatePath('/admin', 'layout');
+
+  return { success: true };
 }

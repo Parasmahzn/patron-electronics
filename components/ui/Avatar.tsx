@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { cn } from '@/lib/utils/cn';
 
 // Deterministic per-name palette instead of a real photo: no upload/storage
@@ -29,13 +30,27 @@ function paletteIndexForName(name: string): number {
 
 export function Avatar({
   name,
+  src,
   size = 40,
   className,
 }: {
   name: string;
+  src?: string | null;
   size?: number;
   className?: string;
 }) {
+  if (src) {
+    return (
+      <Image
+        src={src}
+        alt=""
+        width={size}
+        height={size}
+        className={cn('shrink-0 rounded-full object-cover', className)}
+      />
+    );
+  }
+
   return (
     <span
       aria-hidden="true"
