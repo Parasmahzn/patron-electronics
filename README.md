@@ -119,7 +119,7 @@ Before deploying, run the full quality gate (see below) and apply the schema to 
 
 What this means in practice:
 
-- Editing `ADMIN_PASSWORD` in `.env` changes nothing by itself — the database still has the old hash until you run `pnpm db:seed` again. Since there is no admin-facing "change password" UI, editing `.env` + re-running `pnpm db:seed` is the intended way to rotate the password.
+- Editing `ADMIN_PASSWORD` in `.env` changes nothing by itself — the database still has the old hash until you run `pnpm db:seed` again. `.env` + reseed is a *provisioning* path (useful for a fresh environment or a fully locked-out admin), not the normal way to rotate a password day to day — see the account menu below for that.
 - Editing `ADMIN_EMAIL` and re-seeding does **not** rename the existing admin — upsert is keyed by email, so a different email creates a *second*, separate `Admin` row. The old email keeps working as its own login until removed manually (e.g. via `pnpm db:studio`).
 - Changing `.env` on a server that never runs `pnpm db:seed` again (e.g. most redeploys) has no effect at all — only an actual seed run touches the database.
 
@@ -132,6 +132,14 @@ Beyond provisioning, admin authentication uses:
 - `proxy.ts` performs a fast, optimistic cookie-presence check on every `/admin/*` request; the authoritative authorization check (`requireAdmin()`) runs in the protected layout and inside every mutating service function in `lib/*/*.service.ts`
 
 To create additional admin accounts without going through `.env` + reseed, use Prisma Studio (`pnpm db:studio`) or a one-off script — there is intentionally no public admin sign-up route.
+
+### Account menu (change password, change profile picture)
+
+The topbar's avatar (`components/admin/AdminUserMenu.tsx`) opens a dropdown with **Change Password**, **Change Profile Picture**, and **Logout** — the day-to-day way to manage the signed-in admin's own account, as an alternative to the `.env` + reseed provisioning path above:
+
+- **Change Password** (`changePasswordAction` → `lib/auth/admin.service.ts#changeAdminPassword`) re-verifies the current password server-side before accepting a new one, then hashes and stores it. It also calls `invalidateOtherAdminSessions()` (`lib/auth/session.ts`), signing out every *other* session for that admin — a session opened elsewhere, or a stolen cookie, can't keep working on the old password. The session making the change stays signed in.
+- **Change Profile Picture** (`updateAvatarAction` → `lib/auth/admin.service.ts#updateAdminAvatar`) goes through the same managed upload pipeline as product/category/service images (see [Image Handling](#image-handling)), stored in the new `Admin.avatarUrl` column, with the same upload-then-replace-then-cleanup-orphan ordering as everywhere else that pipeline is used.
+- Both dialogs are built on `components/ui/Dialog.tsx`, a thin wrapper around the native `<dialog>` element (`showModal()`) rather than a hand-rolled overlay — it gets focus-trapping, Escape-to-close, and backdrop dismissal from the browser for free.
 
 ## Image Handling
 
@@ -148,7 +156,7 @@ public/
     products/<yyyy>/<mm>/<uuid>.webp     entire tree is .gitignore'd. In production this
     categories/<yyyy>/<mm>/<uuid>.webp   directory should be a mounted persistent volume
     services/<yyyy>/<mm>/<uuid>.webp     (see Production Persistence below), since a plain
-                                          container filesystem is wiped on every redeploy.
+    avatars/<yyyy>/<mm>/<uuid>.webp       container filesystem is wiped on every redeploy.
 ```
 
 Filenames are UUIDs the server generates itself — the admin's original filename is kept only as inert display metadata, never used to build a path. The `<yyyy>/<mm>/` split just keeps any one directory from accumulating thousands of files over time.
@@ -229,3 +237,4 @@ config/site.ts        Site-wide constants (pagination size, delivery fee, nav li
 - Every admin mutation is authorized server-side inside the service layer (`requireAdmin()`), never only in the UI or `proxy.ts`.
 - Passwords are hashed with bcrypt and never logged or returned from any query; sessions are opaque tokens hashed before storage.
 - Admin image uploads are gated by `requireAdmin()`, never trust the client's declared MIME type or filename, and are validated against the real file bytes (magic-byte sniff + full image decode) before being written to disk with a server-generated name — see [Image Handling](#image-handling).
+- Changing the admin password re-verifies the current password server-side (never trusts that a signed-in session alone is proof of it) and signs out every other active session for that admin — see [Admin Setup](#admin-setup).
