@@ -5,10 +5,8 @@ import { listRepairRequestsForAdmin } from '@/lib/repairs/repair.service';
 import { REPAIR_STATUS_META, REPAIR_STATUS_VALUES } from '@/lib/utils/status';
 import { buildAdminHref } from '@/components/admin/admin-query';
 import { Card } from '@/components/admin/Card';
+import { AdminFilterBar } from '@/components/admin/AdminFilterBar';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { Pagination } from '@/components/ui/Pagination';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { RepairStatus } from '@/lib/generated/prisma/client';
@@ -49,29 +47,23 @@ export default async function AdminRepairRequestsPage({
       </div>
 
       <Card>
-        <form className="flex flex-wrap items-end gap-3" action="/admin/repair-requests">
-          <div className="min-w-48 flex-1">
-            <Input
-              name="q"
-              defaultValue={q}
-              placeholder="Request number, name, or phone..."
-              aria-label="Search repair requests"
-            />
-          </div>
-          <div className="w-full sm:w-56">
-            <Select name="status" defaultValue={status ?? ''} aria-label="Filter by status">
-              <option value="">All Statuses</option>
-              {REPAIR_STATUS_VALUES.map((value) => (
-                <option key={value} value={value}>
-                  {REPAIR_STATUS_META[value].label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
-        </form>
+        <AdminFilterBar
+          searchPlaceholder="Request number, name, or phone..."
+          searchAriaLabel="Search repair requests"
+          searchDefaultValue={q}
+          selects={[
+            {
+              name: 'status',
+              ariaLabel: 'Filter by status',
+              allLabel: 'All Statuses',
+              defaultValue: status ?? '',
+              options: REPAIR_STATUS_VALUES.map((value) => ({
+                value,
+                label: REPAIR_STATUS_META[value].label,
+              })),
+            },
+          ]}
+        />
       </Card>
 
       <Card className="p-0">

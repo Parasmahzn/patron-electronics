@@ -2,7 +2,7 @@
 
 A full-stack e-commerce and repair-service platform for **Patron Electronics** — a mobile & laptop store and repair centre in Gokarneshwor, Kathmandu, Nepal.
 
-Built as a single Next.js application: a public storefront (browse, search, cart, guest checkout with Cash on Delivery, order tracking, repair requests) and a secure admin portal (products, categories, inventory, orders, services, repair requests, reviews, storefront settings).
+Built as a single Next.js application: a public storefront (browse, search, cart, guest checkout with Cash on Delivery, order tracking, repair requests) and a secure admin portal (products, categories, homepage banners, inventory, orders, services, repair requests, reviews, storefront settings).
 
 ## Technology Stack
 
@@ -157,13 +157,14 @@ public/
     categories/<yyyy>/<mm>/<uuid>.webp   directory should be a mounted persistent volume
     services/<yyyy>/<mm>/<uuid>.webp     (see Production Persistence below), since a plain
     avatars/<yyyy>/<mm>/<uuid>.webp       container filesystem is wiped on every redeploy.
+    banners/<yyyy>/<mm>/<uuid>.webp
 ```
 
 Filenames are UUIDs the server generates itself — the admin's original filename is kept only as inert display metadata, never used to build a path. The `<yyyy>/<mm>/` split just keeps any one directory from accumulating thousands of files over time.
 
 ### Upload pipeline (what happens to a file the admin drops in)
 
-1. **Upload UI** (`components/admin/ImageUpload.tsx`) — drag-and-drop/click-to-browse widget on every product/category/service image field, alongside a manual URL text field kept for external URLs.
+1. **Upload UI** (`components/admin/ImageUpload.tsx`) — drag-and-drop/click-to-browse widget on every product/category/service/banner image field, alongside a manual URL text field kept for external URLs.
 2. **Validation** (`lib/uploads/upload.validation.ts`) — rejects anything over 25MB; checks the declared MIME type against an allowlist (JPEG, PNG, WebP, GIF, AVIF — no SVG, so this pipeline can never be used to plant an SVG next to the seed placeholders); sniffs the *actual* file bytes with `file-type` to catch a spoofed extension; decodes with `sharp` to reject corrupted files and enforce a dimension/pixel ceiling (decompression-bomb guard).
 3. **Normalization** — re-encoded to WebP, stripping EXIF metadata, before it ever touches disk. Every managed upload is WebP; nothing else is ever written by this pipeline.
 4. **Storage** (`lib/uploads/storage/`) — an `ImageStorage` interface (`upload`/`delete`/`getUrl`/`exists`) with a `LocalImageStorage` implementation writing to `public/images/<destination>/<yyyy>/<mm>/<uuid>.webp`, selected via `STORAGE_PROVIDER`. Adding S3/Cloudflare R2/Azure Blob later means adding one new class behind the same interface — no changes to Product/Category/Service logic, validation, or the database schema.
@@ -182,6 +183,26 @@ Products carry *multiple* images with richer metadata than categories/services (
 ### Production persistence
 
 A plain container filesystem does not survive a redeploy or restart, and runtime uploads live under `public/images/` precisely because that's the one directory meant to change after boot. Deploying anywhere other than a host with a persistent local disk requires mounting that directory onto durable storage — e.g. a Railway volume mounted at the container's `public/images` path — or switching `STORAGE_PROVIDER` to an object-storage-backed implementation once one exists. Without one or the other, every uploaded image is lost on the next deploy.
+
+## Homepage Content
+
+The homepage hero (`components/storefront/HeroSection.tsx`) is a single two-column section (`lg:grid-cols-5`, collapsing to one column below `lg`), not two stacked sections:
+
+- **Left/first column (60% width, `lg:col-span-3`)** — `components/storefront/BannerCarousel.tsx`, rendered **only when at least one active `Banner` exists**, at every breakpoint (below `lg` it stacks above the text column instead of beside it). Pure image carousel with no text overlaid on it: crossfade autoplay (~5s) that pauses on hover/focus and is skipped entirely — not just slowed — when the visitor has `prefers-reduced-motion` set, chevron arrows, and clickable dot indicators. Each slide is a whole-slide link when it has a `linkUrl` (a plain anchor, so the browser's own pointer cursor on hover needs no special handling) or a plain, non-clickable `div` when it doesn't. Images use `object-contain` inside a fixed `aspect-[2/1]` box — never cropped — so a banner uploaded at the recommended 2:1 ratio (e.g. 1920×960px, noted as a hint on the image field in `BannerForm.tsx`) fills the slot exactly; a different ratio shows as letterboxing rather than a crop.
+- **Right/second column (40% width, `lg:col-span-2`)** — the heading/subheading (from `SiteSettings`), Shop Now/Repair Your Device buttons. **Always rendered**, regardless of whether any banners exist — it's the site's identity statement, not a promotion, so nothing ever covers it.
+- **`Banner` model** (`title`, `image`, `linkUrl`, `displayOrder`, `isActive`) — admin CRUD at `/admin/banners` mirrors the Categories admin pages file-for-file: a thumbnail table with up/down reorder buttons, an active/hidden toggle, and a form (`components/admin/BannerForm.tsx`) using the same managed image-upload pipeline as everything else (see [Image Handling](#image-handling)). `linkUrl` accepts a relative internal path (`/products/some-product`, `/shop?category=mobiles`) or a full external URL, and can be left blank for a non-clickable slide.
+- **Zero active banners** → the first column falls back to the original "Trusted Local Service / Expert Repairs / Cash on Delivery" decorative trust-card grid (still `lg`-only) — a fresh install never shows a blank or broken hero before an admin adds a banner.
+- **"Shop by Category"** (`components/storefront/CategoryScroller.tsx`) is a horizontally-scrollable row with edge-aware chevron buttons — same `getActiveCategories()` data as before, just no longer a wrapping grid. Buttons are hidden on mobile widths, where touch/drag scroll is the natural interaction.
+- Page-level content constants (icon/title/description lists like the homepage's "Why Choose Us" and the about page's capabilities) live in `config/storefront-content.ts`, not hardcoded in the page files that render them — same convention as `config/site.ts` already centralizing `NAV_LINKS`/`SORT_OPTIONS`.
+
+## Footer Social Media Links
+
+Social links (Facebook, Instagram, WhatsApp, Viber, TikTok, or anything else an admin types) are a flat, admin-manageable list, not one database column per platform — adding a brand-new platform later is a new **row**, never a new **column**/schema change:
+
+- **`SocialLink` model** (`platform`, `url`, `displayOrder`, `isActive`) — managed inline within the existing admin Settings page (`components/admin/SettingsForm.tsx`; no separate admin nav section), the same "repeatable rows replaced wholesale on save" pattern already used for product specifications: a Platform selector (the 5 known platforms, or "Other…" revealing a free-text field) plus a URL field, add/remove buttons, and a visibility checkbox per row.
+- **Icons**: `lib/utils/social-icon.ts` maps a known platform key to a real, hand-authored, brand-colored icon component (`components/icons/SocialIcons.tsx` — simplified but recognizable marks, not pixel-exact trademark artwork) and falls back to a generic icon with a title-cased label for anything an admin types that isn't one of the known five. This is the honest limit of "no schema change needed": a genuinely new platform never needs a migration, but its *branded* icon still needs a small code change whenever someone gets around to adding it.
+- Renders as an icon row in the footer (under the business name) and as icon cards on `/contact`. An empty list renders nothing — no placeholder icons for unset platforms.
+- The original `SiteSettings.facebookUrl` column was retired in favor of this — its value was migrated into a `SocialLink` row via a one-off script before the column was dropped, so no existing Facebook link was lost in the switch.
 
 ## Available Scripts
 
@@ -206,28 +227,34 @@ app/
   (store)/           Public storefront routes (shared Navbar/Footer/Cart layout)
   admin/
     login/           Public admin login route
-    (protected)/     Authenticated admin portal (dashboard, products, categories,
+    (protected)/     Authenticated admin portal (dashboard, products, categories, banners,
                       inventory, orders, services, repair-requests, reviews, settings)
   actions/           Server Actions (auth, checkout, repair requests, order tracking, admin CRUD)
   api/               Route Handlers (search autocomplete)
+  uploads/           Route Handler serving managed-upload images (see Image Handling)
 components/
-  ui/                Generic design-system primitives (Button, Input, Badge, Pagination, ...)
-  storefront/        Navbar, Footer, SearchBar, cart button, mobile menu
+  ui/                Generic design-system primitives (Button, Input, Badge, Pagination, Dialog, ...)
+  storefront/        Navbar, Footer, SearchBar, cart button, mobile menu, HeroSection, BannerCarousel,
+                     CategoryScroller
+  icons/             Hand-authored brand icons (SocialIcons.tsx) not covered by lucide-react
   products/          Product cards, badges, filters
   cart/, checkout/   Cart and checkout UI
-  admin/             Admin shell, tables, forms, dashboard widgets
+  admin/             Admin shell, tables, forms, dashboard widgets, live-filtering list controls
+                     (AdminFilterBar — Products/Orders/Repair Requests), account menu
 lib/
   db/                Prisma Client singleton (MariaDB driver adapter)
-  auth/              Password hashing, sessions, rate limiting
+  auth/              Password hashing, sessions, rate limiting, admin account self-service
   uploads/           Image upload validation, storage abstraction (lib/uploads/storage/), lifecycle
-  products/, orders/, services/, repairs/, reviews/, settings/
+  products/, orders/, services/, repairs/, reviews/, settings/, banners/
                      Domain service layers — all business logic and authorization checks
   validations/       Zod schemas (server-side validation for every form/action)
-  utils/             Formatting, slugs, status labels, cn() class helper
+  utils/             Formatting, slugs, status labels, cn() class helper, social-icon lookup
 prisma/
   schema.prisma      Data model
   seed.ts            Seed script
-config/site.ts        Site-wide constants (pagination size, delivery fee, nav links, ...)
+config/
+  site.ts              Site-wide constants (pagination size, delivery fee, nav links, ...)
+  storefront-content.ts Page-level content arrays (Why Choose Us, about page capabilities)
 ```
 
 ## Security Notes

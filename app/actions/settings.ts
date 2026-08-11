@@ -10,16 +10,27 @@ export type SettingsFormState =
   | { success: true }
   | undefined;
 
+function readSocialLinks(formData: FormData): unknown[] {
+  const raw = formData.get('socialLinksJson');
+  if (typeof raw !== 'string') return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function readSettingsForm(formData: FormData) {
   return {
     businessName: String(formData.get('businessName') ?? ''),
     phone: String(formData.get('phone') ?? ''),
     address: String(formData.get('address') ?? ''),
-    facebookUrl: String(formData.get('facebookUrl') ?? ''),
     announcementText: String(formData.get('announcementText') ?? ''),
     heroHeading: String(formData.get('heroHeading') ?? ''),
     heroSubheading: String(formData.get('heroSubheading') ?? ''),
     aboutText: String(formData.get('aboutText') ?? ''),
+    socialLinks: readSocialLinks(formData),
   };
 }
 
@@ -49,10 +60,10 @@ export async function updateSettingsAction(
     return { error: error instanceof Error ? error.message : 'Could not save settings.' };
   }
 
-  // Site settings feed the homepage hero/announcement bar and the about/contact pages.
-  revalidatePath('/');
-  revalidatePath('/about');
-  revalidatePath('/contact');
+  // Site settings feed the homepage hero/announcement bar and the about/contact pages;
+  // social links render in the Footer, which is part of the (store) layout on every
+  // storefront page — invalidate the whole layout tree, not just individual pages.
+  revalidatePath('/', 'layout');
   revalidatePath('/admin/settings');
 
   return { success: true };

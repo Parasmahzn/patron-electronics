@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { NAV_LINKS, SITE_NAME } from '@/config/site';
 import { SearchBar } from './SearchBar';
 import { CartButton } from './CartButton';
@@ -8,10 +9,15 @@ export function Navbar() {
   return (
     <header className="border-border sticky top-0 z-40 border-b bg-white/95 backdrop-blur-sm">
       <div className="container flex h-16 items-center gap-4 lg:h-20">
-        <Link href="/" className="shrink-0">
-          <span className="font-heading text-midnight text-lg font-bold lg:text-xl">
-            {SITE_NAME}
-          </span>
+        <Link href="/" className="relative z-20 shrink-0">
+          <Image
+            src="/patron-electronics-logo.png"
+            alt={SITE_NAME}
+            width={260}
+            height={113}
+            priority
+            className="h-14 w-auto origin-left object-contain transition-transform duration-200 motion-safe:hover:scale-150 lg:h-13"
+          />
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-6 lg:flex">

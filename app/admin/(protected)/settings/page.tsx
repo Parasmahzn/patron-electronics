@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
-import { getSiteSettings } from '@/lib/settings/settings.service';
+import { getSiteSettings, listSocialLinksForAdmin } from '@/lib/settings/settings.service';
 import { SettingsForm } from '@/components/admin/SettingsForm';
 
 export const metadata: Metadata = { title: 'Settings', robots: { index: false, follow: false } };
 
 export default async function AdminSettingsPage() {
-  const settings = await getSiteSettings();
+  const [settings, socialLinks] = await Promise.all([getSiteSettings(), listSocialLinksForAdmin()]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -21,11 +21,15 @@ export default async function AdminSettingsPage() {
           businessName: settings.businessName,
           phone: settings.phone,
           address: settings.address,
-          facebookUrl: settings.facebookUrl ?? '',
           announcementText: settings.announcementText ?? '',
           heroHeading: settings.heroHeading,
           heroSubheading: settings.heroSubheading,
           aboutText: settings.aboutText ?? '',
+          socialLinks: socialLinks.map((link) => ({
+            platform: link.platform,
+            url: link.url,
+            isActive: link.isActive,
+          })),
         }}
       />
     </div>

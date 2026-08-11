@@ -5,10 +5,8 @@ import { listOrdersForAdmin } from '@/lib/orders/order.service';
 import { ORDER_STATUS_META, ORDER_STATUS_VALUES, PAYMENT_STATUS_META } from '@/lib/utils/status';
 import { buildAdminHref } from '@/components/admin/admin-query';
 import { Card } from '@/components/admin/Card';
+import { AdminFilterBar } from '@/components/admin/AdminFilterBar';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { Pagination } from '@/components/ui/Pagination';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency } from '@/lib/utils/format-currency';
@@ -47,29 +45,23 @@ export default async function AdminOrdersPage({
       </div>
 
       <Card>
-        <form className="flex flex-wrap items-end gap-3" action="/admin/orders">
-          <div className="min-w-48 flex-1">
-            <Input
-              name="q"
-              defaultValue={q}
-              placeholder="Order number, name, or phone..."
-              aria-label="Search orders"
-            />
-          </div>
-          <div className="w-full sm:w-56">
-            <Select name="status" defaultValue={status ?? ''} aria-label="Filter by status">
-              <option value="">All Statuses</option>
-              {ORDER_STATUS_VALUES.map((value) => (
-                <option key={value} value={value}>
-                  {ORDER_STATUS_META[value].label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
-        </form>
+        <AdminFilterBar
+          searchPlaceholder="Order number, name, or phone..."
+          searchAriaLabel="Search orders"
+          searchDefaultValue={q}
+          selects={[
+            {
+              name: 'status',
+              ariaLabel: 'Filter by status',
+              allLabel: 'All Statuses',
+              defaultValue: status ?? '',
+              options: ORDER_STATUS_VALUES.map((value) => ({
+                value,
+                label: ORDER_STATUS_META[value].label,
+              })),
+            },
+          ]}
+        />
       </Card>
 
       <Card className="p-0">

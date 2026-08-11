@@ -1,35 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { MapPin, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { getSiteSettings } from '@/lib/settings/settings.service';
+import { ABOUT_CAPABILITIES } from '@/config/storefront-content';
 
 export const metadata: Metadata = {
   title: 'About Us',
   description:
     'Learn about Patron Electronics — a trusted mobile and laptop store and repair centre.',
 };
-
-const CAPABILITIES = [
-  {
-    icon: Smartphone,
-    title: 'Devices & Accessories',
-    description:
-      'Mobile phones, laptops, chargers, cables, earphones, power banks, smart watches, and more.',
-  },
-  {
-    icon: Wrench,
-    title: 'Repair Expertise',
-    description:
-      'Screen replacement, battery replacement, charging port repair, water damage recovery, and general maintenance for mobiles and laptops.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Reliable Service',
-    description:
-      'Straightforward pricing, honest diagnostics, and Cash on Delivery so you always know what you’re paying for.',
-  },
-];
 
 export default async function AboutPage() {
   const settings = await getSiteSettings();
@@ -52,7 +32,7 @@ export default async function AboutPage() {
       </div>
 
       <div className="mt-10 grid gap-5 sm:grid-cols-3">
-        {CAPABILITIES.map((item) => (
+        {ABOUT_CAPABILITIES.map((item) => (
           <div key={item.title} className="border-border rounded-lg border bg-white p-5">
             <item.icon aria-hidden="true" className="text-primary h-7 w-7" />
             <h2 className="font-heading text-midnight mt-3 text-base font-semibold">

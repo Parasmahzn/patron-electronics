@@ -142,6 +142,16 @@ body {
     );
     animation: badge-shimmer-sweep 3.2s ease-in-out infinite;
   }
+
+  /* Horizontal scrollers (e.g. the homepage category row) that rely on
+     visible arrow buttons + touch/drag scroll, not a visible scrollbar. */
+  .scrollbar-hide {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

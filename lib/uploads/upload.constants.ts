@@ -15,6 +15,12 @@ export type UploadAllowedMimeType = (typeof UPLOAD_ALLOWED_MIME_TYPES)[number];
 export const MAX_IMAGE_DIMENSION_PX = 8000;
 export const MAX_IMAGE_PIXELS = 40_000_000; // ~40 megapixels
 
-export const UPLOAD_DESTINATIONS = ['products', 'categories', 'services', 'avatars'] as const;
+export const UPLOAD_DESTINATIONS = [
+  'products',
+  'categories',
+  'services',
+  'avatars',
+  'banners',
+] as const;
 
 export type UploadDestination = (typeof UPLOAD_DESTINATIONS)[number];

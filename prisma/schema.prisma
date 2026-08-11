@@ -80,6 +80,23 @@ model Category {
   @@index([isActive, displayOrder])
 }
 
+// Homepage hero carousel slides. `image` is required (unlike Category/Service,
+// a banner with no image isn't a banner); `linkUrl` is a plain string rather
+// than a validated URL type so it can hold relative internal paths
+// (/products/foo, /shop?category=bar) as well as full external URLs.
+model Banner {
+  id           Int      @id @default(autoincrement())
+  title        String
+  image        String
+  linkUrl      String?
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive, displayOrder])
+}
+
 model Product {
   id                Int         @id @default(autoincrement())
   name              String
@@ -307,10 +324,28 @@ model SiteSettings {
   businessName     String   @default("Patron Electronics")
   phone            String   @default("9843012697")
   address          String   @default("P9MJ+8J6, Gokarneshwor 44600, Nepal")
-  facebookUrl      String?  @default("https://www.facebook.com/p/Patron-Electronics-Mobile-and-repairing-centre-100063595520227/")
   announcementText String?  @default("Free diagnostics on all repair bookings this week")
   heroHeading      String   @default("Your Trusted Mobile & Laptop Store")
   heroSubheading   String   @default("Quality devices, accessories, professional repairs, and reliable service — all in one place.")
   aboutText        String?  @db.Text
   updatedAt        DateTime @updatedAt
+}
+
+// Footer social media links. A flat, admin-manageable list (not one column
+// per platform) so a brand-new platform is just a new row, never a schema
+// change — `platform` is a free-text key ('facebook', 'instagram', ... or
+// anything an admin types); unrecognized keys fall back to a generic icon
+// in the UI rather than failing. Not FK'd to SiteSettings — same reasoning
+// as Category/Service/Banner: a standalone site-wide list, not scoped to
+// another row.
+model SocialLink {
+  id           Int      @id @default(autoincrement())
+  platform     String
+  url          String
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive, displayOrder])
 }

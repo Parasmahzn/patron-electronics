@@ -10,10 +10,9 @@ import { ErrorBanner } from '@/components/admin/ErrorBanner';
 import { StockIndicator } from '@/components/admin/StockIndicator';
 import { Thumbnail } from '@/components/admin/Thumbnail';
 import { buildAdminHref } from '@/components/admin/admin-query';
+import { AdminFilterBar } from '@/components/admin/AdminFilterBar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { Pagination } from '@/components/ui/Pagination';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency } from '@/lib/utils/format-currency';
@@ -64,40 +63,33 @@ export default async function AdminProductsPage({
       <ErrorBanner message={sp.error} />
 
       <Card>
-        <form className="flex flex-wrap items-end gap-3" action="/admin/products">
-          <div className="min-w-48 flex-1">
-            <Input
-              name="q"
-              defaultValue={q}
-              placeholder="Search name, SKU, brand..."
-              aria-label="Search products"
-            />
-          </div>
-          <div className="w-full sm:w-56">
-            <Select
-              name="categoryId"
-              defaultValue={categoryId ? String(categoryId) : ''}
-              aria-label="Filter by category"
-            >
-              <option value="">All Categories</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="w-full sm:w-44">
-            <Select name="status" defaultValue={status ?? ''} aria-label="Filter by status">
-              <option value="">All Statuses</option>
-              <option value="active">Active</option>
-              <option value="archived">Archived</option>
-            </Select>
-          </div>
-          <Button type="submit" variant="outline">
-            Filter
-          </Button>
-        </form>
+        <AdminFilterBar
+          searchPlaceholder="Search name, SKU, brand..."
+          searchAriaLabel="Search products"
+          searchDefaultValue={q}
+          selects={[
+            {
+              name: 'categoryId',
+              ariaLabel: 'Filter by category',
+              allLabel: 'All Categories',
+              defaultValue: categoryId ? String(categoryId) : '',
+              options: categories.map((category) => ({
+                value: String(category.id),
+                label: category.name,
+              })),
+            },
+            {
+              name: 'status',
+              ariaLabel: 'Filter by status',
+              allLabel: 'All Statuses',
+              defaultValue: status ?? '',
+              options: [
+                { value: 'active', label: 'Active' },
+                { value: 'archived', label: 'Archived' },
+              ],
+            },
+          ]}
+        />
       </Card>
 
       <Card className="p-0">

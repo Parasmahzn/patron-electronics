@@ -2,7 +2,7 @@
 // from client components too (e.g. to decide whether to fire an immediate
 // best-effort cleanup call for a file uploaded earlier in the same session).
 const STORAGE_KEY_PATTERN =
-  /^(products|categories|services|avatars)\/\d{4}\/\d{2}\/[0-9a-f-]+\.webp$/;
+  /^(products|categories|services|avatars|banners)\/\d{4}\/\d{2}\/[0-9a-f-]+\.webp$/;
 
 export function isValidStorageKey(key: string): boolean {
   return STORAGE_KEY_PATTERN.test(key);

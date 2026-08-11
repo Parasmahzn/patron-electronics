@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { MapPin, Phone, ExternalLink } from 'lucide-react';
-import { getSiteSettings } from '@/lib/settings/settings.service';
+import { MapPin, Phone } from 'lucide-react';
+import { getSiteSettings, getActiveSocialLinks } from '@/lib/settings/settings.service';
+import { getSocialIcon, getSocialPlatformLabel } from '@/lib/utils/social-icon';
 import { SITE_NAME } from '@/config/site';
 
 export async function Footer() {
-  const settings = await getSiteSettings();
+  const [settings, socialLinks] = await Promise.all([getSiteSettings(), getActiveSocialLinks()]);
   const year = new Date().getFullYear();
 
   return (
@@ -15,6 +16,26 @@ export async function Footer() {
           <p className="mt-3 text-sm text-slate-400">
             Quality devices, accessories, and professional repair services you can trust.
           </p>
+          {socialLinks.length > 0 && (
+            <ul className="mt-4 flex flex-wrap items-center gap-2">
+              {socialLinks.map((link) => {
+                const Icon = getSocialIcon(link.platform);
+                return (
+                  <li key={link.id}>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={getSocialPlatformLabel(link.platform)}
+                      className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-slate-300 transition-colors hover:bg-white/20 hover:text-white"
+                    >
+                      <Icon aria-hidden="true" className="h-5 w-5" />
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
         <div>
@@ -77,19 +98,6 @@ export async function Footer() {
                 {settings.phone}
               </a>
             </li>
-            {settings.facebookUrl && (
-              <li className="flex items-center gap-2">
-                <ExternalLink aria-hidden="true" className="text-accent h-4 w-4 shrink-0" />
-                <a
-                  href={settings.facebookUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-white"
-                >
-                  Facebook Page
-                </a>
-              </li>
-            )}
           </ul>
         </div>
       </div>
