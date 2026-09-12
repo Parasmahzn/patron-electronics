@@ -41,12 +41,10 @@ cp .env.example .env
 | Variable | Description |
 | --- | --- |
 | `DATABASE_URL` | MySQL connection string: `mysql://USER:PASSWORD@HOST:PORT/DATABASE`. URL-encode special characters in the password (e.g. `?` → `%3F`, `+` → `%2B`). |
-| `AUTH_SECRET` | Random secret used for session-related cryptography. Generate with `openssl rand -base64 32`. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Only read by `pnpm db:seed`, which upserts an `Admin` row keyed by this email and (re)hashes this password into it. Login itself checks the database, not these variables directly — see [Admin Setup](#admin-setup). Never commit real credentials. |
 | `NODE_ENV` | `development` or `production`. |
 | `NEXT_PUBLIC_SITE_URL` | Public base URL, used for metadata/canonical URLs. |
-| `STORAGE_PROVIDER` | Image upload storage backend: `local` (writes under `public/images/`) or `s3` (any S3-compatible bucket). See [Image Handling](#image-handling) for the full storage layout. |
-| `S3_ENDPOINT` / `S3_BUCKET` / `S3_REGION` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Required when `STORAGE_PROVIDER=s3`. Works with any S3-compatible bucket — Railway buckets, Cloudflare R2, MinIO, Backblaze, DigitalOcean Spaces, AWS S3 itself — including a **private-only** bucket (e.g. Railway Storage Buckets), since objects are read back server-side and served through `/uploads/...`, never fetched directly from the bucket by the browser. Server-side only; never sent to the browser. |
+| `S3_ENDPOINT` / `S3_BUCKET` / `S3_REGION` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Required — all image uploads go to an S3-compatible bucket. Works with any provider — Railway buckets, Cloudflare R2, MinIO, Backblaze, DigitalOcean Spaces, AWS S3 itself — including a **private-only** bucket (e.g. Railway Storage Buckets), since objects are read back server-side and served through `/uploads/...`, never fetched directly from the bucket by the browser. Server-side only; never sent to the browser. See [Image Handling](#image-handling) for the full storage layout. |
 
 **Never commit `.env`.** It is already git-ignored.
 
@@ -144,7 +142,7 @@ The topbar's avatar (`components/admin/AdminUserMenu.tsx`) opens a dropdown with
 
 ## Image Handling
 
-Product/category/service images are stored as URLs/paths, not binaries, in the database. Two entirely separate kinds of image content exist on disk, deliberately kept apart:
+Product/category/service images are stored as URLs/paths, not binaries, in the database. Two entirely separate kinds of image content exist, deliberately kept apart:
 
 ```text
 public/
@@ -153,41 +151,35 @@ public/
                                 Part of the build; never written to or read by the upload
                                 pipeline; never deleted by any admin action (see below).
 
-  images/                      Runtime-upload space ONLY. Nothing here at build time — the
-    products/<yyyy>/<mm>/<uuid>.webp     entire tree is .gitignore'd. In production this
-    categories/<yyyy>/<mm>/<uuid>.webp   directory should be a mounted persistent volume
-    services/<yyyy>/<mm>/<uuid>.webp     (see Production Persistence below), since a plain
-    avatars/<yyyy>/<mm>/<uuid>.webp       container filesystem is wiped on every redeploy.
+S3 bucket (S3_* env vars — see below):
+    products/<yyyy>/<mm>/<uuid>.webp     Runtime-upload space. Every managed upload —
+    categories/<yyyy>/<mm>/<uuid>.webp   product/category/service/banner image or admin
+    services/<yyyy>/<mm>/<uuid>.webp     avatar — lives only in the S3-compatible bucket
+    avatars/<yyyy>/<mm>/<uuid>.webp      configured by S3_*, never on the app's own disk.
     banners/<yyyy>/<mm>/<uuid>.webp
 ```
 
-Filenames are UUIDs the server generates itself — the admin's original filename is kept only as inert display metadata, never used to build a path. The `<yyyy>/<mm>/` split just keeps any one directory from accumulating thousands of files over time.
+Filenames are UUIDs the server generates itself — the admin's original filename is kept only as inert display metadata, never used to build a path. The `<yyyy>/<mm>/` split just keeps any one prefix from accumulating thousands of objects over time.
 
 ### Upload pipeline (what happens to a file the admin drops in)
 
 1. **Upload UI** (`components/admin/ImageUpload.tsx`) — drag-and-drop/click-to-browse widget on every product/category/service/banner image field, alongside a manual URL text field kept for external URLs.
 2. **Validation** (`lib/uploads/upload.validation.ts`) — rejects anything over 25MB; checks the declared MIME type against an allowlist (JPEG, PNG, WebP, GIF, AVIF — no SVG, so this pipeline can never be used to plant an SVG next to the seed placeholders); sniffs the *actual* file bytes with `file-type` to catch a spoofed extension; decodes with `sharp` to reject corrupted files and enforce a dimension/pixel ceiling (decompression-bomb guard).
-3. **Normalization** — re-encoded to WebP, stripping EXIF metadata, before it ever touches disk. Every managed upload is WebP; nothing else is ever written by this pipeline.
-4. **Storage** (`lib/uploads/storage/`) — an `ImageStorage` interface (`upload`/`delete`/`getUrl`/`exists`/`read`) selected via `STORAGE_PROVIDER`: `LocalImageStorage` writes to `public/images/<destination>/<yyyy>/<mm>/<uuid>.webp`; `S3ImageStorage` (`s3-image-storage.ts`) uploads to any S3-compatible bucket via `@aws-sdk/client-s3` (endpoint/region/credentials from `S3_*` env vars, `forcePathStyle: true`). Both providers return the same `/uploads/<storageKey>` URL shape — the bucket does not need to support public read at all, since objects are read back through `read()` and served by the app itself (see below). Adding another provider (R2, Azure Blob) later means adding one new class behind the same interface — no changes to Product/Category/Service logic, validation, or the database schema.
-5. **Lifecycle & cleanup** — a new image is uploaded and confirmed stored *before* an old one is ever deleted, never the reverse. A failed save cleans up the file it would have referenced; replacing or removing an image, or deleting the owning product/category/service, deletes the now-orphaned file only after the database change succeeds. No file is deleted while a database row still references it — and this cleanup is keyed off the database's `storageKey` column, so it can never reach a seed placeholder (seed rows never populate that column).
+3. **Normalization** — re-encoded to WebP, stripping EXIF metadata, before it's ever uploaded. Every managed upload is WebP; nothing else is ever written by this pipeline.
+4. **Storage** (`lib/uploads/storage/`) — an `ImageStorage` interface (`upload`/`delete`/`getUrl`/`exists`/`read`), implemented once by `S3ImageStorage` (`s3-image-storage.ts`), which uploads to any S3-compatible bucket via `@aws-sdk/client-s3` (endpoint/region/credentials from `S3_*` env vars, `forcePathStyle: true`). The interface exists so a second provider (R2 under a different SDK, Azure Blob, etc.) could be added later behind the same abstraction with no changes to Product/Category/Service logic, validation, or the database schema — but only S3 is implemented; there is no local-disk fallback.
+5. **Lifecycle & cleanup** — a new image is uploaded and confirmed stored *before* an old one is ever deleted, never the reverse. A failed save cleans up the file it would have referenced; replacing or removing an image, or deleting the owning product/category/service, deletes the now-orphaned object only after the database change succeeds. No object is deleted while a database row still references it — and this cleanup is keyed off the database's `storageKey` column, so it can never reach a seed placeholder (seed rows never populate that column).
 
 ### How uploaded images are served
 
-**Both providers** are served through `app/uploads/[...path]/route.ts` (`GET /uploads/<storageKey>`) — a Route Handler that calls `getImageStorage().read(storageKey)` fresh on every request — **not** through Next.js's built-in `public/` static file serving, and not by pointing the browser at the bucket directly.
+Uploaded images are served through `app/uploads/[...path]/route.ts` (`GET /uploads/<storageKey>`) — a Route Handler that calls `getImageStorage().read(storageKey)` (an authenticated `GetObjectCommand` against the bucket) fresh on every request — **not** by pointing the browser at the bucket directly.
 
-This matters and is easy to get backwards: `next start` computes its set of servable `public/` files once at server boot and never rescans the filesystem afterward. Any file that appears in `public/images/` *after* the server has already started — which describes every single runtime upload, by definition — would 404 forever under plain static serving, no matter how long it's actually been sitting on disk. (`next dev` doesn't have this limitation, which is why a naive setup can look correct in local development and then fail in production.) The seed placeholders under `public/seed/` don't have this problem because they exist before the server ever boots, so they're served natively as ordinary static assets.
+A bucket-direct URL (returning `${S3_PUBLIC_URL_BASE}/<key>` from `getUrl()`) was tried first and abandoned: it requires the bucket to allow public, unauthenticated read access, which several real S3-compatible providers simply don't offer — notably **Railway Storage Buckets, which are private-only** (no public buckets, no ACLs). Routing every read through this app instead works against any provider regardless of its public-access support, at the cost of every image request passing through this server rather than being served edge-direct from the bucket/CDN.
 
-A bucket-direct URL (returning `${S3_PUBLIC_URL_BASE}/<key>` from `getUrl()`) was tried first and abandoned: it requires the bucket to allow public, unauthenticated read access, which several real S3-compatible providers simply don't offer — notably **Railway Storage Buckets, which are private-only** (no public buckets, no ACLs). Routing every read through this app instead — an authenticated `GetObjectCommand` server-side for `S3ImageStorage`, a plain `fs.readFile` for `LocalImageStorage` — works against any provider regardless of its public-access support, at the cost of every image request passing through this server rather than being served edge-direct from the bucket/CDN.
-
-`lib/uploads/storage-key.ts` (`extractStorageKeyFromUrl`) — used by the entity services, and by `deleteUploadedImageAction` (`app/actions/uploads.ts`), to turn a stored `image`/`avatarUrl` string back into a storage key for cleanup on replace/delete — recognizes the `/uploads/` prefix both providers now produce identically. An image saved under the old, pre-proxy S3 URL scheme (a direct bucket URL) won't match and so won't be auto-cleaned up — harmless, and expected to be rare/nonexistent outside of the brief window this project used that scheme.
+`lib/uploads/storage-key.ts` (`extractStorageKeyFromUrl`) — used by the entity services, and by `deleteUploadedImageAction` (`app/actions/uploads.ts`), to turn a stored `image`/`avatarUrl` string back into a storage key for cleanup on replace/delete — recognizes the `/uploads/` prefix `getUrl()` always produces. An image saved under the old, pre-proxy S3 URL scheme (a direct bucket URL, from before this design) won't match and so won't be auto-cleaned-up — harmless, and expected to be rare/nonexistent outside of the brief window this project used that scheme.
 
 ### Product images
 
 Products carry *multiple* images with richer metadata than categories/services (which have a single `image` string field each). The `ProductImage` table stores, per image: `url`, `alt`, `sortOrder`, `isPrimary`, and — for images that went through the managed upload pipeline — `storageKey`, `originalName`, `mimeType`, `fileSize`, `width`, `height`, `format` (all nullable, so seed/legacy/external images need no backfill). The admin product form exposes explicit reorder and "set as primary" controls backed by these columns, not an implicit array-index convention.
-
-### Production persistence
-
-A plain container filesystem does not survive a redeploy or restart, and runtime uploads live under `public/images/` precisely because that's the one directory meant to change after boot. Deploying anywhere other than a host with a persistent local disk requires mounting that directory onto durable storage — e.g. a Railway volume mounted at the container's `public/images` path — or switching `STORAGE_PROVIDER` to an object-storage-backed implementation once one exists. Without one or the other, every uploaded image is lost on the next deploy.
 
 ## Homepage Content
 
