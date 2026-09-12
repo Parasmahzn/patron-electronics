@@ -47,4 +47,16 @@ export class LocalImageStorage implements ImageStorage {
       return false;
     }
   }
+
+  async read(storageKey: string): Promise<Buffer | null> {
+    try {
+      return await fs.readFile(resolvePath(storageKey));
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        console.error(`Failed to read uploaded image "${storageKey}":`, err);
+      }
+      return null;
+    }
+  }
 }

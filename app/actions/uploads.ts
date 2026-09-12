@@ -4,6 +4,7 @@ import { requireAdmin } from '@/lib/auth/session';
 import {
   uploadImage,
   deleteUploadedImage,
+  extractStorageKeyFromUrl,
   type UploadedImageMetadata,
 } from '@/lib/uploads/upload.service';
 import { UPLOAD_DESTINATIONS, type UploadDestination } from '@/lib/uploads/upload.constants';
@@ -36,6 +37,15 @@ export async function uploadImageAction(
   }
 }
 
-export async function deleteUploadedImageAction(storageKey: string): Promise<void> {
+/**
+ * Takes the raw stored `image`/`avatarUrl` string, not a pre-computed
+ * storage key — the key extraction happens here, server-side, specifically
+ * so the bucket's URL prefix never needs to be known by client code. A URL
+ * that isn't one of our managed uploads (external, manually typed) safely
+ * no-ops.
+ */
+export async function deleteUploadedImageAction(url: string): Promise<void> {
+  const storageKey = extractStorageKeyFromUrl(url);
+  if (!storageKey) return;
   await deleteUploadedImage(storageKey);
 }

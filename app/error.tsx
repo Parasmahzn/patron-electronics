@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 
 export default function GlobalError({
   error,
@@ -21,13 +22,21 @@ export default function GlobalError({
         We hit an unexpected error on our end. Please try again, and contact us if the problem
         continues.
       </p>
-      <button
-        type="button"
-        onClick={() => reset()}
-        className="bg-primary hover:bg-primary-dark inline-flex h-11 items-center justify-center rounded-md px-5 text-sm font-medium text-white transition-colors"
-      >
-        Try again
-      </button>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <button
+          type="button"
+          onClick={() => reset()}
+          className="bg-primary hover:bg-primary-dark inline-flex h-11 items-center justify-center rounded-md px-5 text-sm font-medium text-white transition-colors"
+        >
+          Try again
+        </button>
+        <Link
+          href="/"
+          className="border-border text-midnight hover:bg-surface inline-flex h-11 items-center justify-center rounded-md border px-5 text-sm font-medium transition-colors"
+        >
+          Go to homepage
+        </Link>
+      </div>
     </div>
   );
 }

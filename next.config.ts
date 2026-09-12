@@ -1,6 +1,15 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // Next's default is 1MB, far below UPLOAD_MAX_SIZE_BYTES (25MB in
+      // lib/uploads/upload.constants.ts) — an image upload over 1MB was
+      // being rejected by Next itself before our own code (and its
+      // friendly error handling) ever ran, surfacing as a bare 500.
+      bodySizeLimit: '26mb',
+    },
+  },
   async headers() {
     return [
       {

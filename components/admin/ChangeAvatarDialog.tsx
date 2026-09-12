@@ -9,7 +9,6 @@ import { ErrorBanner } from '@/components/admin/ErrorBanner';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import { updateAvatarAction } from '@/app/actions/auth';
 import { deleteUploadedImageAction } from '@/app/actions/uploads';
-import { extractStorageKeyFromUrl } from '@/lib/uploads/storage-key';
 
 export function ChangeAvatarDialog({
   name,
@@ -27,23 +26,23 @@ export function ChangeAvatarDialog({
 
   // The avatar this dialog opened with. Replacing it with a new upload
   // before saving is safe to clean up immediately — nothing in the DB
-  // references the superseded upload yet.
-  const initialKeyRef = useRef(extractStorageKeyFromUrl(currentAvatarUrl));
+  // references the superseded upload yet. Key extraction happens
+  // server-side inside deleteUploadedImageAction (a URL that isn't one of
+  // our managed uploads safely no-ops there).
+  const initialUrlRef = useRef(currentAvatarUrl ?? '');
 
   function handleUploaded(url: string) {
-    const previousKey = extractStorageKeyFromUrl(avatarUrl);
-    if (previousKey && previousKey !== initialKeyRef.current) {
-      void deleteUploadedImageAction(previousKey);
+    if (avatarUrl && avatarUrl !== initialUrlRef.current) {
+      void deleteUploadedImageAction(avatarUrl);
     }
     setAvatarUrl(url);
   }
 
   function handleClose() {
     // Discarding an uploaded-but-unsaved image — clean it up rather than
-    // leaving it orphaned on disk.
-    const currentKey = extractStorageKeyFromUrl(avatarUrl);
-    if (currentKey && currentKey !== initialKeyRef.current) {
-      void deleteUploadedImageAction(currentKey);
+    // leaving it orphaned.
+    if (avatarUrl && avatarUrl !== initialUrlRef.current) {
+      void deleteUploadedImageAction(avatarUrl);
     }
     onClose();
   }

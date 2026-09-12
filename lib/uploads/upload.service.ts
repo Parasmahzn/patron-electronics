@@ -1,7 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { requireAdmin } from '@/lib/auth/session';
-import { imageStorage } from './storage';
+import { getImageStorage } from './storage';
 import { validateAndProcessImage } from './upload.validation';
 import { UPLOAD_DESTINATIONS, type UploadDestination } from './upload.constants';
 import { isValidStorageKey } from './storage-key';
@@ -40,11 +40,12 @@ export async function uploadImage(
   const processed = await validateAndProcessImage(inputBuffer, file.type);
 
   const storageKey = buildStorageKey(destination);
-  await imageStorage.upload(processed.buffer, storageKey);
+  const storage = getImageStorage();
+  await storage.upload(processed.buffer, storageKey);
 
   return {
     storageKey,
-    url: imageStorage.getUrl(storageKey),
+    url: storage.getUrl(storageKey),
     // Stored only as inert display metadata — never used for paths or checks.
     originalName: file.name,
     mimeType: 'image/webp',
@@ -76,7 +77,7 @@ export async function deleteUploadedImageInternal(storageKey: string): Promise<v
   }
 
   try {
-    await imageStorage.delete(storageKey);
+    await getImageStorage().delete(storageKey);
   } catch (error) {
     console.error(`Failed to clean up uploaded image "${storageKey}":`, error);
   }

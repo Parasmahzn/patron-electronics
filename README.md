@@ -45,7 +45,8 @@ cp .env.example .env
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Only read by `pnpm db:seed`, which upserts an `Admin` row keyed by this email and (re)hashes this password into it. Login itself checks the database, not these variables directly — see [Admin Setup](#admin-setup). Never commit real credentials. |
 | `NODE_ENV` | `development` or `production`. |
 | `NEXT_PUBLIC_SITE_URL` | Public base URL, used for metadata/canonical URLs. |
-| `STORAGE_PROVIDER` | Image upload storage backend. Only `local` is implemented (writes under `public/images/`); see [Image Handling](#image-handling) for the full storage layout. |
+| `STORAGE_PROVIDER` | Image upload storage backend: `local` (writes under `public/images/`) or `s3` (any S3-compatible bucket). See [Image Handling](#image-handling) for the full storage layout. |
+| `S3_ENDPOINT` / `S3_BUCKET` / `S3_REGION` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Required when `STORAGE_PROVIDER=s3`. Works with any S3-compatible bucket — Railway buckets, Cloudflare R2, MinIO, Backblaze, DigitalOcean Spaces, AWS S3 itself — including a **private-only** bucket (e.g. Railway Storage Buckets), since objects are read back server-side and served through `/uploads/...`, never fetched directly from the bucket by the browser. Server-side only; never sent to the browser. |
 
 **Never commit `.env`.** It is already git-ignored.
 
@@ -127,8 +128,8 @@ Beyond provisioning, admin authentication uses:
 
 - Server-side sessions stored in the database (`AdminSession`), referenced by an opaque, HTTP-only, `SameSite=Lax` cookie — the raw session token is never stored server-side, only its SHA-256 hash
 - Secure cookies in production (`Secure` flag set when `NODE_ENV=production`)
-- A 10-minute idle timeout: `AdminSession.lastActiveAt` is checked and refreshed on every authenticated request (`getAdminSession()`), and a client-side watcher (`components/admin/IdleTimeoutWatcher.tsx`) warns and then signs out an idle admin even if they never trigger another request
-- Persistent, database-backed login rate limiting (`LoginAttempt`) — 5 failed attempts locks an IP out for 15 minutes
+- A 10-minute idle timeout: `AdminSession.lastActiveAt` is checked and refreshed on every authenticated request (`getAdminSession()`), and a client-side watcher (`components/admin/IdleTimeoutWatcher.tsx`) shows a blocking modal with a live countdown ~30 seconds before expiry (`ADMIN_IDLE_WARNING_SECONDS`), then signs the admin out even if they never trigger another request. "Stay logged in" resets the timer; "Sign out now" or a manual topbar logout both go to `/admin/login` — but an unattended session that actually times out redirects to the public storefront homepage instead (`idleLogoutAction` vs `logoutAction`, both in `app/actions/auth.ts`), since whoever's at the keyboard when it expires probably isn't the admin anymore.
+- Persistent, database-backed login rate limiting (`LoginAttempt`) — 5 failed attempts locks an *identifier* out for 15 minutes. That identifier is derived from `X-Forwarded-For`, trusting the **last** comma-separated entry (the value Railway's own edge proxy appends), not the first (client-supplied and trivially spoofable) — see [Security Notes](#security-notes).
 - `proxy.ts` performs a fast, optimistic cookie-presence check on every `/admin/*` request; the authoritative authorization check (`requireAdmin()`) runs in the protected layout and inside every mutating service function in `lib/*/*.service.ts`
 
 To create additional admin accounts without going through `.env` + reseed, use Prisma Studio (`pnpm db:studio`) or a one-off script — there is intentionally no public admin sign-up route.
@@ -167,14 +168,18 @@ Filenames are UUIDs the server generates itself — the admin's original filenam
 1. **Upload UI** (`components/admin/ImageUpload.tsx`) — drag-and-drop/click-to-browse widget on every product/category/service/banner image field, alongside a manual URL text field kept for external URLs.
 2. **Validation** (`lib/uploads/upload.validation.ts`) — rejects anything over 25MB; checks the declared MIME type against an allowlist (JPEG, PNG, WebP, GIF, AVIF — no SVG, so this pipeline can never be used to plant an SVG next to the seed placeholders); sniffs the *actual* file bytes with `file-type` to catch a spoofed extension; decodes with `sharp` to reject corrupted files and enforce a dimension/pixel ceiling (decompression-bomb guard).
 3. **Normalization** — re-encoded to WebP, stripping EXIF metadata, before it ever touches disk. Every managed upload is WebP; nothing else is ever written by this pipeline.
-4. **Storage** (`lib/uploads/storage/`) — an `ImageStorage` interface (`upload`/`delete`/`getUrl`/`exists`) with a `LocalImageStorage` implementation writing to `public/images/<destination>/<yyyy>/<mm>/<uuid>.webp`, selected via `STORAGE_PROVIDER`. Adding S3/Cloudflare R2/Azure Blob later means adding one new class behind the same interface — no changes to Product/Category/Service logic, validation, or the database schema.
+4. **Storage** (`lib/uploads/storage/`) — an `ImageStorage` interface (`upload`/`delete`/`getUrl`/`exists`/`read`) selected via `STORAGE_PROVIDER`: `LocalImageStorage` writes to `public/images/<destination>/<yyyy>/<mm>/<uuid>.webp`; `S3ImageStorage` (`s3-image-storage.ts`) uploads to any S3-compatible bucket via `@aws-sdk/client-s3` (endpoint/region/credentials from `S3_*` env vars, `forcePathStyle: true`). Both providers return the same `/uploads/<storageKey>` URL shape — the bucket does not need to support public read at all, since objects are read back through `read()` and served by the app itself (see below). Adding another provider (R2, Azure Blob) later means adding one new class behind the same interface — no changes to Product/Category/Service logic, validation, or the database schema.
 5. **Lifecycle & cleanup** — a new image is uploaded and confirmed stored *before* an old one is ever deleted, never the reverse. A failed save cleans up the file it would have referenced; replacing or removing an image, or deleting the owning product/category/service, deletes the now-orphaned file only after the database change succeeds. No file is deleted while a database row still references it — and this cleanup is keyed off the database's `storageKey` column, so it can never reach a seed placeholder (seed rows never populate that column).
 
 ### How uploaded images are served
 
-Uploaded images are served through `app/uploads/[...path]/route.ts` (`GET /uploads/<storageKey>`) — a Route Handler that reads the file from disk fresh on every request — **not** through Next.js's built-in `public/` static file serving.
+**Both providers** are served through `app/uploads/[...path]/route.ts` (`GET /uploads/<storageKey>`) — a Route Handler that calls `getImageStorage().read(storageKey)` fresh on every request — **not** through Next.js's built-in `public/` static file serving, and not by pointing the browser at the bucket directly.
 
 This matters and is easy to get backwards: `next start` computes its set of servable `public/` files once at server boot and never rescans the filesystem afterward. Any file that appears in `public/images/` *after* the server has already started — which describes every single runtime upload, by definition — would 404 forever under plain static serving, no matter how long it's actually been sitting on disk. (`next dev` doesn't have this limitation, which is why a naive setup can look correct in local development and then fail in production.) The seed placeholders under `public/seed/` don't have this problem because they exist before the server ever boots, so they're served natively as ordinary static assets.
+
+A bucket-direct URL (returning `${S3_PUBLIC_URL_BASE}/<key>` from `getUrl()`) was tried first and abandoned: it requires the bucket to allow public, unauthenticated read access, which several real S3-compatible providers simply don't offer — notably **Railway Storage Buckets, which are private-only** (no public buckets, no ACLs). Routing every read through this app instead — an authenticated `GetObjectCommand` server-side for `S3ImageStorage`, a plain `fs.readFile` for `LocalImageStorage` — works against any provider regardless of its public-access support, at the cost of every image request passing through this server rather than being served edge-direct from the bucket/CDN.
+
+`lib/uploads/storage-key.ts` (`extractStorageKeyFromUrl`) — used by the entity services, and by `deleteUploadedImageAction` (`app/actions/uploads.ts`), to turn a stored `image`/`avatarUrl` string back into a storage key for cleanup on replace/delete — recognizes the `/uploads/` prefix both providers now produce identically. An image saved under the old, pre-proxy S3 URL scheme (a direct bucket URL) won't match and so won't be auto-cleaned up — harmless, and expected to be rare/nonexistent outside of the brief window this project used that scheme.
 
 ### Product images
 
@@ -257,6 +262,11 @@ config/
   storefront-content.ts Page-level content arrays (Why Choose Us, about page capabilities)
 ```
 
+## Error Handling
+
+- **Unmatched routes** (`app/not-found.tsx`) — any URL that doesn't resolve renders a real 404 (correct HTTP status) with a "Page not found" message, then auto-redirects to the homepage after 3 seconds via `router.replace('/')`. A "Back to Home now" link is also shown for anyone who doesn't want to wait, and as a no-JS fallback.
+- **Unhandled errors** (`app/error.tsx`) — Next's root error boundary catches unexpected render/server errors, logs them server-side only (`console.error`, never rendered to the visitor), and shows a generic "Something went wrong" message with two actions: "Try again" (`reset()`) and "Go to homepage".
+
 ## Security Notes
 
 - Customers never have accounts; the browser cart is never trusted — checkout always re-fetches prices, discounts, and stock from the database inside a single transaction, decrements inventory atomically, and rejects orders for inactive products or insufficient stock.
@@ -265,3 +275,5 @@ config/
 - Passwords are hashed with bcrypt and never logged or returned from any query; sessions are opaque tokens hashed before storage.
 - Admin image uploads are gated by `requireAdmin()`, never trust the client's declared MIME type or filename, and are validated against the real file bytes (magic-byte sniff + full image decode) before being written to disk with a server-generated name — see [Image Handling](#image-handling).
 - Changing the admin password re-verifies the current password server-side (never trusts that a signed-in session alone is proof of it) and signs out every other active session for that admin — see [Admin Setup](#admin-setup).
+- Login always performs a real bcrypt comparison (`verifyLoginPassword`, `lib/auth/password.ts`), even when the submitted email doesn't match any admin — comparing against a fixed dummy hash instead of short-circuiting to `false`, so response time can't be used to enumerate which admin emails exist.
+- The login lockout identifier trusts the *last* `X-Forwarded-For` entry, not the first (`getClientIdentifier`, `app/actions/auth.ts`) — a proxy appends the address of whoever connected to *it* to the end of the header, so for this app's single-hop deployment (browser → Railway's edge → this container) that's the value Railway itself observed. The first entry is client-supplied and spoofable; trusting it would let an attacker defeat the 5-attempt lockout by sending a different fake value on every login POST. If another proxy (e.g. a CDN) is ever put in front of Railway, this needs to skip an additional trusted hop from the end.

@@ -9,7 +9,6 @@ import { ErrorBanner } from '@/components/admin/ErrorBanner';
 import { Thumbnail } from '@/components/admin/Thumbnail';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import { deleteUploadedImageAction } from '@/app/actions/uploads';
-import { extractStorageKeyFromUrl } from '@/lib/uploads/storage-key';
 import { slugify } from '@/lib/utils/slugify';
 import type { ServiceFormState } from '@/app/actions/services';
 
@@ -40,12 +39,13 @@ export function ServiceForm({
   const [image, setImage] = useState(initialValues?.image ?? '');
   const fieldErrors = state?.fieldErrors ?? {};
 
-  const initialKeyRef = useRef(extractStorageKeyFromUrl(initialValues?.image));
+  // Key extraction happens server-side inside deleteUploadedImageAction (a
+  // URL that isn't one of our managed uploads safely no-ops there).
+  const initialUrlRef = useRef(initialValues?.image ?? '');
 
   function handleImageUploaded(url: string) {
-    const previousKey = extractStorageKeyFromUrl(image);
-    if (previousKey && previousKey !== initialKeyRef.current) {
-      void deleteUploadedImageAction(previousKey);
+    if (image && image !== initialUrlRef.current) {
+      void deleteUploadedImageAction(image);
     }
     setImage(url);
   }

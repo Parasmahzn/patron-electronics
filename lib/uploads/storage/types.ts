@@ -6,4 +6,6 @@ export interface ImageStorage {
   /** Renderable, public-facing path for a stored key. */
   getUrl(storageKey: string): string;
   exists(storageKey: string): Promise<boolean>;
+  /** Reads the stored bytes back, or `null` if the key doesn't exist. */
+  read(storageKey: string): Promise<Buffer | null>;
 }

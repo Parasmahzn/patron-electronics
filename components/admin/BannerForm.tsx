@@ -8,7 +8,6 @@ import { ErrorBanner } from '@/components/admin/ErrorBanner';
 import { Thumbnail } from '@/components/admin/Thumbnail';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import { deleteUploadedImageAction } from '@/app/actions/uploads';
-import { extractStorageKeyFromUrl } from '@/lib/uploads/storage-key';
 import type { BannerFormState } from '@/app/actions/banners';
 
 export type BannerFormInitialValues = {
@@ -35,13 +34,14 @@ export function BannerForm({
 
   // The image this form loaded with. Replacing it with a new upload before
   // saving is safe to clean up immediately — nothing in the DB references
-  // the superseded upload from this session yet.
-  const initialKeyRef = useRef(extractStorageKeyFromUrl(initialValues?.image));
+  // the superseded upload from this session yet. Key extraction happens
+  // server-side inside deleteUploadedImageAction (a URL that isn't one of
+  // our managed uploads safely no-ops there).
+  const initialUrlRef = useRef(initialValues?.image ?? '');
 
   function handleImageUploaded(url: string) {
-    const previousKey = extractStorageKeyFromUrl(image);
-    if (previousKey && previousKey !== initialKeyRef.current) {
-      void deleteUploadedImageAction(previousKey);
+    if (image && image !== initialUrlRef.current) {
+      void deleteUploadedImageAction(image);
     }
     setImage(url);
   }

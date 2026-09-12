@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
-import { AlertTriangle } from 'lucide-react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { Clock } from 'lucide-react';
+import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
-import { logoutAction } from '@/app/actions/auth';
+import { logoutAction, idleLogoutAction } from '@/app/actions/auth';
 import { ADMIN_IDLE_TIMEOUT_MINUTES, ADMIN_IDLE_WARNING_SECONDS } from '@/config/site';
 
 const IDLE_TIMEOUT_MS = ADMIN_IDLE_TIMEOUT_MINUTES * 60 * 1000;
@@ -32,82 +32,113 @@ function writeLastActive(timestamp: number): void {
  * it's actually idle past the threshold); this component exists so an admin
  * who never triggers another request while idle still gets warned and
  * signed out, instead of only discovering it's happened on their next click.
+ *
+ * While the warning is showing, incidental activity (mousemove, scroll) does
+ * NOT silently dismiss it — the admin must explicitly choose "Stay logged
+ * in" or "Sign out now" in the dialog, so a countdown that's already begun
+ * can't be reset by, say, an unattended mouse resting on the trackpad.
  */
 export function IdleTimeoutWatcher() {
   const [showWarning, setShowWarning] = useState(false);
-  const [isLoggingOut, startTransition] = useTransition();
-  const reduceMotion = useReducedMotion();
+  const [secondsRemaining, setSecondsRemaining] = useState(ADMIN_IDLE_WARNING_SECONDS);
+  const [isPending, startTransition] = useTransition();
   const loggedOutRef = useRef(false);
+  const warningActiveRef = useRef(false);
 
-  const handleActivity = useCallback(() => {
+  useEffect(() => {
+    warningActiveRef.current = showWarning;
+  }, [showWarning]);
+
+  const handleStayLoggedIn = useCallback(() => {
     writeLastActive(Date.now());
     setShowWarning(false);
+  }, []);
+
+  const handleSignOutNow = useCallback(() => {
+    if (loggedOutRef.current) return;
+    loggedOutRef.current = true;
+    startTransition(() => {
+      void logoutAction();
+    });
   }, []);
 
   useEffect(() => {
     writeLastActive(Date.now());
 
+    const onUserActivity = () => {
+      // Ignored once the warning dialog is up — see the component doc
+      // comment above for why.
+      if (!warningActiveRef.current) {
+        writeLastActive(Date.now());
+      }
+    };
+
     for (const eventName of ACTIVITY_EVENTS) {
-      window.addEventListener(eventName, handleActivity, { passive: true });
+      window.addEventListener(eventName, onUserActivity, { passive: true });
     }
 
     const intervalId = window.setInterval(() => {
       if (loggedOutRef.current) return;
 
       const idleMs = Date.now() - readLastActive();
+      const remainingMs = IDLE_TIMEOUT_MS - idleMs;
 
-      if (idleMs >= IDLE_TIMEOUT_MS) {
+      if (remainingMs <= 0) {
         loggedOutRef.current = true;
         startTransition(() => {
-          void logoutAction();
+          void idleLogoutAction();
         });
         return;
       }
 
-      setShowWarning(idleMs >= IDLE_TIMEOUT_MS - WARNING_MS);
+      if (remainingMs <= WARNING_MS) {
+        setShowWarning(true);
+        setSecondsRemaining(Math.ceil(remainingMs / 1000));
+      }
     }, CHECK_INTERVAL_MS);
 
     return () => {
       for (const eventName of ACTIVITY_EVENTS) {
-        window.removeEventListener(eventName, handleActivity);
+        window.removeEventListener(eventName, onUserActivity);
       }
       window.clearInterval(intervalId);
     };
-  }, [handleActivity]);
+  }, []);
+
+  if (!showWarning) return null;
 
   return (
-    <AnimatePresence>
-      {showWarning && (
-        <motion.div
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="idle-timeout-heading"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 12 }}
-          transition={{ duration: reduceMotion ? 0 : 0.2 }}
-          className="border-border fixed right-4 bottom-4 z-[60] flex w-full max-w-sm items-start gap-3 rounded-lg border bg-white p-4 shadow-lg"
-        >
-          <AlertTriangle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
-          <div className="flex-1">
-            <p id="idle-timeout-heading" className="text-midnight text-sm font-semibold">
-              You&apos;ll be signed out soon
-            </p>
-            <p className="text-muted mt-1 text-sm">
-              No activity detected. You&apos;ll be automatically logged out shortly for security.
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              className="mt-3"
-              disabled={isLoggingOut}
-              onClick={handleActivity}
-            >
-              Stay signed in
-            </Button>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <Dialog title="You'll be signed out soon" onClose={handleStayLoggedIn}>
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div className="bg-primary/10 text-primary flex h-12 w-12 items-center justify-center rounded-full">
+          <Clock aria-hidden="true" className="h-6 w-6" />
+        </div>
+        <p className="text-muted text-sm">
+          No activity detected. For security, you&apos;ll be automatically signed out in:
+        </p>
+        <p className="text-midnight font-heading text-3xl font-bold tabular-nums">
+          00:{secondsRemaining < 10 ? `0${secondsRemaining}` : secondsRemaining}
+        </p>
+        <div className="flex w-full flex-col gap-2 sm:flex-row">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1"
+            disabled={isPending}
+            onClick={handleSignOutNow}
+          >
+            Sign out now
+          </Button>
+          <Button
+            type="button"
+            className="flex-1"
+            disabled={isPending}
+            onClick={handleStayLoggedIn}
+          >
+            Stay logged in
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }

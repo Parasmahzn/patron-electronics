@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import type { z } from 'zod';
 import { prisma } from '@/lib/db/client';
 import { changePasswordSchema, loginSchema } from '@/lib/validations/auth';
-import { verifyPassword } from '@/lib/auth/password';
+import { verifyLoginPassword } from '@/lib/auth/password';
 import { createAdminSession, destroyAdminSession, requireAdmin } from '@/lib/auth/session';
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '@/lib/auth/rate-limit';
 import { changeAdminPassword, updateAdminAvatar } from '@/lib/auth/admin.service';
@@ -32,7 +32,18 @@ function toFieldErrors(error: z.ZodError): Record<string, string> {
 async function getClientIdentifier(): Promise<string> {
   const headersList = await headers();
   const forwardedFor = headersList.get('x-forwarded-for');
-  if (forwardedFor) return forwardedFor.split(',')[0].trim();
+  if (forwardedFor) {
+    // A proxy appends the address of whoever connected to *it* to the end of
+    // this header. For a single trusted hop in front of this app (Railway's
+    // edge), the last entry is the one Railway itself observed — the first
+    // entry is whatever the client claimed and is trivially spoofable, which
+    // would otherwise let an attacker defeat the login lockout below by
+    // sending a different fake value on every attempt. If another proxy
+    // (e.g. a CDN) is ever added in front of Railway, this needs to skip an
+    // additional trusted hop from the end instead of assuming exactly one.
+    const parts = forwardedFor.split(',').map((part) => part.trim());
+    return parts[parts.length - 1] || 'unknown';
+  }
   return headersList.get('x-real-ip') ?? 'unknown';
 }
 
@@ -56,7 +67,9 @@ export async function loginAction(
   }
 
   const admin = await prisma.admin.findUnique({ where: { email: parsed.data.email } });
-  const isValid = admin ? await verifyPassword(parsed.data.password, admin.passwordHash) : false;
+  // Always runs a real bcrypt comparison, even when no admin matches the
+  // email, so the response time doesn't reveal which admin emails exist.
+  const isValid = await verifyLoginPassword(parsed.data.password, admin?.passwordHash);
 
   if (!admin || !isValid) {
     await recordFailedLogin(identifier);
@@ -71,6 +84,18 @@ export async function loginAction(
 export async function logoutAction() {
   await destroyAdminSession();
   redirect('/admin/login');
+}
+
+/**
+ * Used only by the idle-timeout auto-logout (IdleTimeoutWatcher), not the
+ * manual "Logout" button. An admin who deliberately clicks Logout probably
+ * wants to sign back in right away, so that goes to /admin/login; an
+ * unattended session that timed out sends whoever's now at the keyboard to
+ * the public site instead, since it's unlikely to still be that admin.
+ */
+export async function idleLogoutAction() {
+  await destroyAdminSession();
+  redirect('/');
 }
 
 export async function changePasswordAction(
