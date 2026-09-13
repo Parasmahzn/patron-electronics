@@ -28,7 +28,7 @@ export function HeroSection({
         aria-hidden="true"
         className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(37,99,235,0.35),_transparent_55%)]"
       />
-      <div className="relative container grid items-center gap-10 py-16 sm:py-20 lg:grid-cols-5 lg:py-28">
+      <div className="relative container grid items-center gap-3 py-5 sm:gap-10 sm:py-20 lg:grid-cols-5 lg:py-28">
         {banners.length > 0 ? (
           <div className="w-full lg:col-span-3">
             <BannerCarousel banners={banners} />
@@ -59,11 +59,11 @@ export function HeroSection({
             <Smartphone aria-hidden="true" className="h-3.5 w-3.5" />
             Mobile &amp; Laptop Store and Repair Centre
           </span>
-          <h1 className="font-heading mt-5 text-3xl leading-tight font-bold text-white sm:text-4xl">
+          <h1 className="font-heading mt-4 text-2xl leading-tight font-bold text-white sm:mt-5 sm:text-4xl">
             {heading}
           </h1>
-          <p className="mt-4 max-w-xl text-base text-slate-300 sm:text-lg">{subheading}</p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <p className="mt-3 max-w-xl text-sm text-slate-300 sm:mt-4 sm:text-lg">{subheading}</p>
+          <div className="mt-5 flex flex-wrap gap-3 sm:mt-8">
             <Link href="/shop">
               <Button size="lg">
                 Shop Now

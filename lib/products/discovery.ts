@@ -131,7 +131,7 @@ export async function getProductBySlug(slug: string) {
   return prisma.product.findFirst({
     where: { slug, isActive: true },
     include: {
-      images: { orderBy: { sortOrder: 'asc' } },
+      images: { orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }] },
       specifications: { orderBy: { displayOrder: 'asc' } },
       category: { select: { id: true, name: true, slug: true } },
     },

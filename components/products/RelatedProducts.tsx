@@ -13,7 +13,7 @@ export async function RelatedProducts({ categoryId, excludeProductId }: Props) {
   return (
     <section className="mt-16">
       <h2 className="font-heading text-midnight text-xl font-bold sm:text-2xl">Related Products</h2>
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
         {products.map((product) => (
           <ProductCard key={product.id} product={product} />
         ))}

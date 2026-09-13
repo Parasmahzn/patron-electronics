@@ -125,7 +125,13 @@ export function SearchBar({
       </form>
 
       {isOpen && query.trim().length >= 2 && (
-        <div className="border-border absolute z-40 mt-2 w-full overflow-hidden rounded-lg border bg-white shadow-lg">
+        // The results panel deliberately isn't tied to the trigger input's
+        // own width — the header's search input is compact (see Navbar), but
+        // a suggestion row (image + name + price + stock) needs real room
+        // regardless of how narrow the field that opened it is. Anchored to
+        // the right edge so it grows toward the header's center instead of
+        // off the right side of the viewport.
+        <div className="border-border absolute right-0 z-40 mt-2 w-full overflow-hidden rounded-lg border bg-white shadow-lg sm:w-96">
           {suggestions.length === 0 && !isLoading ? (
             <p className="text-muted px-4 py-6 text-center text-sm">
               No products found for &ldquo;{query}&rdquo;

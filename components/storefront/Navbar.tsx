@@ -8,8 +8,8 @@ import { MobileMenu } from './MobileMenu';
 export function Navbar() {
   return (
     <header className="border-border sticky top-0 z-40 border-b bg-white/95 backdrop-blur-sm">
-      <div className="container flex h-16 items-center gap-4 lg:h-20">
-        <Link href="/" className="relative z-20 shrink-0">
+      <div className="container flex h-16 items-center gap-4 lg:grid lg:h-20 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-6">
+        <Link href="/" className="relative z-20 shrink-0 lg:justify-self-start">
           <Image
             src="/patron-electronics-logo.png"
             alt={SITE_NAME}
@@ -20,7 +20,11 @@ export function Navbar() {
           />
         </Link>
 
-        <nav aria-label="Main" className="hidden items-center gap-6 lg:flex">
+        {/* Centered as its own grid column (flanked by two equal-width
+            tracks) rather than just centered in the leftover space next to
+            the logo — stays dead-center of the full-bleed header regardless
+            of how wide the logo or the search+cart cluster are. */}
+        <nav aria-label="Main" className="hidden items-center gap-6 lg:flex lg:justify-self-center">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
@@ -32,11 +36,10 @@ export function Navbar() {
           ))}
         </nav>
 
-        <div className="hidden flex-1 lg:block lg:max-w-sm">
-          <SearchBar />
-        </div>
-
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-3 lg:ml-0 lg:justify-self-end">
+          <div className="hidden lg:block lg:w-56 xl:w-64">
+            <SearchBar />
+          </div>
           <CartButton />
           <MobileMenu />
         </div>

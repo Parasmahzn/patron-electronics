@@ -35,9 +35,15 @@ body {
   color: var(--foreground);
 }
 
+/* Tailwind v4 ships its own built-in `.container` utility with a
+   per-breakpoint max-width (e.g. 1536px at the 2xl breakpoint) — since that
+   utility lives in the framework's `@layer utilities`, its declarations only
+   lose to ours on properties we actually set ourselves. `max-width: none`
+   must be explicit here, or Tailwind's own value silently wins once the
+   viewport crosses one of its breakpoints. */
 .container {
   width: 100%;
-  max-width: 1320px;
+  max-width: none;
   margin-inline: auto;
   padding-inline: 1rem;
 }
@@ -51,6 +57,12 @@ body {
 @media (min-width: 1024px) {
   .container {
     padding-inline: 2rem;
+  }
+}
+
+@media (min-width: 1536px) {
+  .container {
+    padding-inline: 3rem;
   }
 }
 

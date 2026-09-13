@@ -45,8 +45,8 @@ export function CategoryScroller({ categories }: { categories: Category[] }) {
   }
 
   return (
-    <section className="container py-10 sm:py-12">
-      <div className="mb-6 flex items-end justify-between gap-3">
+    <section className="container py-5 sm:py-12">
+      <div className="mb-4 flex items-end justify-between gap-3 sm:mb-6">
         <h2 className="font-heading text-midnight text-xl font-bold sm:text-2xl">
           Shop by Category
         </h2>
@@ -90,13 +90,13 @@ export function CategoryScroller({ categories }: { categories: Category[] }) {
           <Link
             key={category.id}
             href={`/categories/${category.slug}`}
-            className="group border-border flex w-28 shrink-0 flex-col items-center gap-3 rounded-lg border bg-white p-4 text-center transition-shadow hover:shadow-md sm:w-32"
+            className="group border-border flex w-28 shrink-0 flex-col items-center gap-2 rounded-lg border bg-white p-3 text-center transition-shadow hover:shadow-md sm:w-32 sm:gap-3 sm:p-4"
           >
-            <div className="bg-surface relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full">
+            <div className="bg-surface relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full sm:h-16 sm:w-16">
               {category.image ? (
                 <Image src={category.image} alt="" fill className="object-cover" />
               ) : (
-                <Smartphone aria-hidden="true" className="text-primary h-7 w-7" />
+                <Smartphone aria-hidden="true" className="text-primary h-6 w-6 sm:h-7 sm:w-7" />
               )}
             </div>
             <span className="text-midnight group-hover:text-primary text-sm font-medium">
